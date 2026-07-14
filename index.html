@@ -141,6 +141,65 @@
 
   .install-hint{font-size:12px;color:var(--sub);text-align:center;margin-top:22px;line-height:1.6;}
   .footer-link{display:block;text-align:center;font-size:12px;color:var(--sub);margin-top:10px;text-decoration:none;}
+
+  /* Apple-style press feedback: a small spring-like squish instead of a flat opacity flip */
+  .mode-btn, .big-btn, .opt-pill, .due-card button, .tog{ transition:transform .12s cubic-bezier(.34,1.56,.64,1), opacity .12s, background .15s, border-color .15s; }
+  .mode-btn:active, .big-btn:active, .opt-pill:active, .due-card button:active{ transform:scale(.97); opacity:1; }
+  .ans-btn{ transition:transform .1s ease, border-color .15s, background .15s; }
+  .ans-btn:not(:disabled):active{ transform:scale(.985); }
+
+  /* Streak badge */
+  .streak-badge{display:inline-flex;align-items:center;gap:5px;font-size:12.5px;font-weight:700;color:var(--amber);
+    background:var(--amber-bg);padding:5px 11px;border-radius:20px;margin-left:auto;}
+
+  /* Trial banner */
+  .trial-banner{display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--chip-bg);
+    border:1px solid var(--border);border-radius:14px;padding:10px 14px;margin-bottom:14px;font-size:12.5px;color:var(--text);}
+  .trial-banner.urgent{background:var(--bad-bg);}
+  .trial-banner b{font-weight:700;}
+  .trial-banner button{background:var(--accent);color:#fff;border:none;font-size:12px;font-weight:700;padding:7px 13px;border-radius:10px;cursor:pointer;flex-shrink:0;}
+
+  /* Upgrade screen */
+  .price-card{background:var(--due-grad);border-radius:20px;padding:24px 20px;color:#fff;text-align:center;margin-bottom:16px;
+    box-shadow:0 6px 20px rgba(74,99,214,.25);}
+  .price-card .amt{font-size:36px;font-weight:800;}
+  .price-card .per{font-size:13px;opacity:.85;}
+  .feature-list{list-style:none;margin:0 0 16px;padding:0;}
+  .feature-list li{display:flex;align-items:flex-start;gap:10px;padding:9px 0;border-bottom:1px solid var(--border);font-size:14px;}
+  .feature-list li:last-child{border-bottom:none;}
+  .feature-list li .ck{color:var(--good);flex-shrink:0;}
+  .memory-tip{background:var(--chip-bg);border-radius:14px;padding:14px 16px;margin-top:14px;font-size:12.5px;color:var(--text);line-height:1.6;}
+  .memory-tip b{color:var(--accent);}
+
+  /* ══════════════════════════════════════════════════════════
+     Responsive: comfortable on phone, iPad, and desktop alike.
+     ══════════════════════════════════════════════════════════ */
+  @media (min-width: 700px){
+    body{padding-top:max(40px,env(safe-area-inset-top));}
+    .wrap{max-width:660px;}
+    .brand h1{font-size:22px;}
+    .mode-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+    .mode-grid .mode-btn{margin-bottom:0;}
+    .q-text{font-size:19px;}
+    .ans-btn{font-size:15px;padding:15px 16px;}
+    .card{padding:24px;}
+  }
+  @media (min-width: 1080px){
+    .wrap{max-width:840px;}
+    .due-card{padding:26px 28px;}
+    .due-card .n{font-size:40px;}
+    .stat-box{padding:16px 10px;}
+    .stat-box .n{font-size:24px;}
+    .quiz-top, .prog-bar{max-width:640px;margin-left:auto;margin-right:auto;}
+    #quiz .card, #results .card{max-width:640px;margin-left:auto;margin-right:auto;}
+    .wrong-list-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+    .wrong-list-grid .wrong-item{margin-bottom:0;}
+    .wrong-list-grid .section-title{grid-column:1/-1;}
+    .wrong-list-grid .empty-state{grid-column:1/-1;}
+  }
+  @media (min-width: 700px) and (pointer:fine){
+    .mode-btn:hover, .big-btn:hover, .ans-btn:not(:disabled):hover, .opt-pill:hover{ border-color:var(--accent); }
+  }
 </style>
 </head>
 <body>
@@ -154,6 +213,12 @@
         <h1>B777 Question Bank</h1>
         <div class="sub" id="homeSub">964 questions</div>
       </div>
+      <span class="streak-badge" id="streakBadge" style="display:none;">🔥 <span id="streakN">0</span> day streak</span>
+    </div>
+
+    <div class="trial-banner" id="trialBanner" style="display:none;">
+      <span id="trialText"></span>
+      <button onclick="show('upgrade');renderUpgrade();">Upgrade</button>
     </div>
 
     <div class="due-card" id="dueCard" style="display:none;">
@@ -173,28 +238,30 @@
       <div class="stat-box"><div class="n" id="statWrong">0</div><div class="l">Needs work</div></div>
     </div>
 
-    <button class="mode-btn practice" onclick="openSetup('practice')">
-      <div class="ic">📘</div>
-      <div><div class="t">Practice</div><div class="d">Pick your count and category, smart review built in</div></div>
-      <div class="arrow">›</div>
-    </button>
-    <button class="mode-btn theory" onclick="startFixedExam('tech', 20, 'Theory Test')">
-      <div class="ic">📝</div>
-      <div><div class="t">Theory Test</div><div class="d">20 technical questions, simulates the real exam</div></div>
-      <div class="arrow">›</div>
-    </button>
-    <button class="mode-btn interview" onclick="startFixedExam('interview', 10, 'Interview Exam')">
-      <div class="ic">🎙️</div>
-      <div><div class="t">Interview Exam</div><div class="d">10 interview-style questions, kept separate from theory</div></div>
-      <div class="arrow">›</div>
-    </button>
-    <button class="mode-btn wrongbank" onclick="openWrongBank()">
-      <div class="ic">🔁</div>
-      <div><div class="t">Mistake Bank</div><div class="d" id="wrongBankDesc">Drill the questions you keep getting wrong</div></div>
-      <div class="arrow">›</div>
-    </button>
+    <div class="mode-grid">
+      <button class="mode-btn practice" onclick="openSetup('practice')">
+        <div class="ic">📘</div>
+        <div><div class="t">Practice</div><div class="d">Pick your count and category, smart review built in</div></div>
+        <div class="arrow">›</div>
+      </button>
+      <button class="mode-btn theory" onclick="startFixedExam('tech', 20, 'Theory Test')">
+        <div class="ic">📝</div>
+        <div><div class="t">Theory Test</div><div class="d">20 technical questions, simulates the real exam</div></div>
+        <div class="arrow">›</div>
+      </button>
+      <button class="mode-btn interview" onclick="startFixedExam('interview', 10, 'Interview Exam')">
+        <div class="ic">🎙️</div>
+        <div><div class="t">Interview Exam</div><div class="d">10 interview-style questions, kept separate from theory</div></div>
+        <div class="arrow">›</div>
+      </button>
+      <button class="mode-btn wrongbank" onclick="openWrongBank()">
+        <div class="ic">🔁</div>
+        <div><div class="t">Mistake Bank</div><div class="d" id="wrongBankDesc">Drill the questions you keep getting wrong</div></div>
+        <div class="arrow">›</div>
+      </button>
+    </div>
 
-    <div class="install-hint">💡 Add this page to your Home Screen / Desktop — the whole app and question bank then work fully offline.</div>
+    <div class="install-hint" id="installHint">💡 Add this page to your Home Screen / Desktop — the whole app and question bank then work fully offline.</div>
     <a class="footer-link" href="#" onclick="openReportIssue(null);return false;">🚩 Report an error in the question bank</a>
   </div>
 
@@ -256,8 +323,9 @@
       <div class="result-summary" id="resultSummary">0 questions, 0 correct</div>
       <button class="big-btn" id="reviewWrongBtn" onclick="reviewWrongFromResults()">Review this session's mistakes</button>
       <button class="big-btn secondary" onclick="show('home');renderHome();">Back to Home</button>
+      <div class="memory-tip" id="resultsMemoryTip"></div>
     </div>
-    <div id="wrongList"></div>
+    <div id="wrongList" class="wrong-list-grid"></div>
   </div>
 
   <!-- WRONG BANK -->
@@ -268,7 +336,30 @@
       <p class="desc" id="wrongBankTop">No mistakes recorded yet</p>
       <button class="big-btn" id="practiceWrongBtn" onclick="practiceAllWrong()">Start Review</button>
     </div>
-    <div id="wrongBankList"></div>
+    <div id="wrongBankList" class="wrong-list-grid"></div>
+  </div>
+
+  <!-- UPGRADE -->
+  <div class="screen" id="upgrade">
+    <button class="back-link" onclick="show('home')">‹ Back</button>
+    <div class="price-card">
+      <div class="amt">$19</div>
+      <div class="per">one-time · lifetime offline access</div>
+    </div>
+    <div class="card">
+      <h2 id="upgradeTitle">Keep studying offline</h2>
+      <p class="desc" id="upgradeDesc">Practicing and testing online always stays free. Paying unlocks installing the app to your desktop/iPad/phone with the full question bank cached, so you can keep drilling with zero signal — on a jump seat, in the sim, wherever.</p>
+      <ul class="feature-list">
+        <li><span class="ck">✓</span> Full offline access, no time limit</li>
+        <li><span class="ck">✓</span> Works installed on desktop, iPad and phone</li>
+        <li><span class="ck">✓</span> All 964 questions cached on your device</li>
+        <li><span class="ck">✓</span> Your progress and spaced-repetition schedule stay with you</li>
+        <li><span class="ck">✓</span> One payment, no subscription</li>
+      </ul>
+      <button class="big-btn" onclick="goToPayment()">Continue to Payment</button>
+      <button class="big-btn secondary" onclick="show('home')">Maybe later</button>
+    </div>
+    <div class="memory-tip"><b>Why offline matters here:</b> spaced repetition only works if you actually do the reviews when they come due. Crews lose connectivity constantly — layovers, sim sessions, long-haul legs — and a missed review window is a missed chance to lock in the memory before it fades.</div>
   </div>
 
 </div>
@@ -326,6 +417,109 @@ function isMastered(c){ return c.reps>=2 && c.ef>=2.3; }
 function needsWork(c){ return c.wrong>0 && c.wrong >= (c.seen - c.wrong); }
 
 // ══════════════════════════════════════════════════════════════
+// Daily streak — a lightweight nudge toward the thing that actually
+// matters for memory: short, frequent sessions beat long cram sessions.
+// ══════════════════════════════════════════════════════════════
+var STREAK_KEY = 'b777_streak_v1';
+var STREAK = {count:0, lastDate:''};
+try{ STREAK = JSON.parse(localStorage.getItem(STREAK_KEY)||'null') || STREAK; }catch(e){}
+function todayStr(){ return new Date().toISOString().slice(0,10); }
+function bumpStreak(){
+  var today = todayStr();
+  if(STREAK.lastDate === today) return;
+  var y = new Date(Date.now()-86400000).toISOString().slice(0,10);
+  STREAK.count = (STREAK.lastDate === y) ? STREAK.count+1 : 1;
+  STREAK.lastDate = today;
+  try{ localStorage.setItem(STREAK_KEY, JSON.stringify(STREAK)); }catch(e){}
+}
+
+// ══════════════════════════════════════════════════════════════
+// Trial & offline-access paywall.
+// Practicing/testing online is always free. Only *offline* access
+// (installing the app + caching the question bank via the service
+// worker) is gated behind a free trial, then a one-time payment.
+//
+// This is a client-side trial (localStorage), which is fine for a
+// small trusted group of colleagues on the honor system — it is not
+// tamper-proof against someone clearing site data. A real multi-tenant
+// rollout would want a small backend to track this server-side.
+//
+// Payment confirmation: point your Stripe Payment Link's post-payment
+// redirect at this page with "?paid=1" appended (Stripe supports a
+// custom confirmation URL per link, no backend needed) - see PAYMENT_LINK_URL below.
+// ══════════════════════════════════════════════════════════════
+var TRIAL_KEY = 'b777_trial_v1';
+var TRIAL_DAYS = 14;
+var PAYMENT_LINK_URL = 'https://YOUR-PAYMENT-LINK-HERE'; // TODO: replace with your Stripe Payment Link (or PayPal/etc.) URL
+var TRIAL = {};
+try{ TRIAL = JSON.parse(localStorage.getItem(TRIAL_KEY)||'{}'); }catch(e){ TRIAL = {}; }
+if(!TRIAL.start) TRIAL.start = Date.now();
+if(new URLSearchParams(location.search).get('paid')==='1'){
+  TRIAL.paidUntil = Date.now() + 3650*86400000; // effectively lifetime for a one-time purchase
+  history.replaceState(null,'',location.pathname);
+}
+try{ localStorage.setItem(TRIAL_KEY, JSON.stringify(TRIAL)); }catch(e){}
+
+function trialDaysLeft(){ return Math.max(0, TRIAL_DAYS - Math.floor((Date.now()-TRIAL.start)/86400000)); }
+function isPaidUser(){ return !!(TRIAL.paidUntil && TRIAL.paidUntil > Date.now()); }
+function offlineAllowed(){ return isPaidUser() || trialDaysLeft() > 0; }
+
+function renderTrialBanner(){
+  var banner = document.getElementById('trialBanner');
+  var installHint = document.getElementById('installHint');
+  if(isPaidUser()){
+    banner.style.display = 'none';
+    installHint.textContent = '✅ Offline access unlocked — add this page to your Home Screen / Desktop any time.';
+    return;
+  }
+  var days = trialDaysLeft();
+  banner.style.display = 'flex';
+  if(days > 0){
+    banner.classList.remove('urgent');
+    document.getElementById('trialText').innerHTML = '<b>' + days + ' day' + (days===1?'':'s') + '</b> left of free offline access';
+    installHint.textContent = '💡 Add this page to your Home Screen / Desktop — the whole app and question bank then work fully offline during your trial.';
+  } else {
+    banner.classList.add('urgent');
+    document.getElementById('trialText').innerHTML = '<b>Trial ended</b> — offline access is now paused';
+    installHint.textContent = '⚠️ Your free trial has ended, so this device will need a connection each time. Upgrade to restore offline access.';
+  }
+}
+
+function setupServiceWorker(){
+  if(!('serviceWorker' in navigator)) return;
+  if(offlineAllowed()){
+    window.addEventListener('load', function(){ navigator.serviceWorker.register('./sw.js').catch(function(){}); });
+  } else {
+    navigator.serviceWorker.getRegistrations().then(function(regs){
+      regs.forEach(function(r){ r.unregister(); });
+    });
+    if(window.caches) caches.keys().then(function(keys){ keys.forEach(function(k){ if(k.indexOf('b777')===0) caches.delete(k); }); });
+  }
+}
+
+function renderUpgrade(){
+  if(isPaidUser()){
+    document.getElementById('upgradeTitle').textContent = 'You\'re all set';
+    document.getElementById('upgradeDesc').textContent = 'Offline access is unlocked on this account. Thanks for supporting the question bank!';
+  }
+}
+function goToPayment(){
+  if(PAYMENT_LINK_URL.indexOf('YOUR-PAYMENT-LINK-HERE') >= 0){
+    alert('Payment link not configured yet — set PAYMENT_LINK_URL in index.html to your Stripe Payment Link (or other checkout) URL.');
+    return;
+  }
+  location.href = PAYMENT_LINK_URL;
+}
+
+var MEMORY_TIPS = [
+  'Short, frequent reviews beat long cram sessions — the forgetting curve is steepest right after you first learn something, so a quick check-in tomorrow locks it in better than doing 50 more right now.',
+  'Getting a question wrong isn\'t a setback — it\'s the system doing its job. Missed questions get rescheduled sooner so you see them again before you forget for good.',
+  'Consistency beats intensity. A 10-minute session every day builds stronger recall than one 2-hour session a week.',
+  'Once a question feels easy, its review interval stretches out automatically — you\'ll naturally spend more time on what actually needs it.'
+];
+function randomMemoryTip(){ return MEMORY_TIPS[Math.floor(Math.random()*MEMORY_TIPS.length)]; }
+
+// ══════════════════════════════════════════════════════════════
 // Screens
 // ══════════════════════════════════════════════════════════════
 function show(id){
@@ -364,6 +558,16 @@ function renderHome(){
   } else {
     dueCard.style.display = 'none';
   }
+
+  var streakBadge = document.getElementById('streakBadge');
+  if(STREAK.count>0){
+    streakBadge.style.display = 'inline-flex';
+    document.getElementById('streakN').textContent = STREAK.count;
+  } else {
+    streakBadge.style.display = 'none';
+  }
+
+  renderTrialBanner();
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -557,6 +761,7 @@ function submitAnswer(){
   }
 
   gradeSM2(q.id, correct);
+  bumpStreak();
 
   SESSION.results.push({ q:q, chosen:letter, correct:correct });
   document.getElementById('submitBtn').style.display = 'none';
@@ -581,6 +786,7 @@ function showResults(){
   document.getElementById('scoreRing').style.setProperty('--pct', pct);
   document.getElementById('scorePct').textContent = pct + '%';
   document.getElementById('resultSummary').textContent = total + ' questions, ' + correct + ' correct, ' + (total-correct) + ' wrong';
+  document.getElementById('resultsMemoryTip').innerHTML = '<b>Memory tip: </b>' + randomMemoryTip();
 
   var wrongOnes = SESSION.results.filter(function(r){return !r.correct;});
   document.getElementById('reviewWrongBtn').style.display = wrongOnes.length>0 ? 'block' : 'none';
@@ -685,15 +891,7 @@ function openReportIssue(q){
   window.open(url, '_blank');
 }
 
-// ══════════════════════════════════════════════════════════════
-// Service worker (offline)
-// ══════════════════════════════════════════════════════════════
-if('serviceWorker' in navigator){
-  window.addEventListener('load', function(){
-    navigator.serviceWorker.register('./sw.js').catch(function(){});
-  });
-}
-
+setupServiceWorker();
 renderHome();
 </script>
 </body>
