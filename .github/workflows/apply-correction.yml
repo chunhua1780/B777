@@ -1,0 +1,55 @@
+name: Apply community-approved correction
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  apply:
+    if: >
+      contains(github.event.issue.labels.*.name, 'correction') &&
+      contains(fromJSON('["APPROVE","Approve","approve"]'), github.event.comment.body)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Check approvals and apply if threshold met
+        id: apply
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        run: node scripts/apply-correction.js
+
+      - name: Commit and push
+        if: steps.apply.outputs.applied == 'true'
+        run: |
+          git config user.name "b777-correction-bot"
+          git config user.email "actions@github.com"
+          git add questions.js
+          git commit -m "Apply community-approved correction (issue #${{ github.event.issue.number }})"
+          git push
+
+      - name: Comment and close (applied)
+        if: steps.apply.outputs.applied == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh issue comment ${{ github.event.issue.number }} --body "✅ ${{ steps.apply.outputs.summary }}
+
+          The question bank has been updated and will redeploy automatically."
+          gh issue edit ${{ github.event.issue.number }} --add-label applied
+          gh issue close ${{ github.event.issue.number }}
+
+      - name: Comment (not yet applied)
+        if: steps.apply.outputs.applied == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh issue comment ${{ github.event.issue.number }} --body "ℹ️ ${{ steps.apply.outputs.summary }}"
