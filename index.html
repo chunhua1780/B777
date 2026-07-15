@@ -96,12 +96,51 @@
   .tog.on .td{left:20px;}
 
   /* Quiz screen */
-  .quiz-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;}
-  .quiz-top .prog-txt{font-size:13px;color:var(--sub);font-weight:600;}
+  .quiz-top{display:flex;align-items:center;gap:10px;margin-bottom:10px;}
+  .quiz-top .prog-txt{font-size:13px;color:var(--sub);font-weight:600;margin-left:auto;}
   .quiz-top .cat-chip{font-size:11px;font-weight:700;padding:4px 10px;border-radius:20px;background:var(--chip-bg);color:var(--accent);}
+  .quiz-top .back-link{margin:0;padding:4px 0;}
   .prog-bar{height:5px;border-radius:3px;background:var(--border);overflow:hidden;margin-bottom:18px;}
   .prog-fill{height:100%;background:var(--accent);border-radius:3px;transition:width .25s ease;}
+  .q-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:6px;}
   .q-id{font-size:11px;color:var(--sub);margin-bottom:6px;}
+  .flag-btn{border:1.5px solid var(--border);background:var(--card);color:var(--sub);font-size:12px;font-weight:700;
+    padding:6px 12px;border-radius:20px;cursor:pointer;flex-shrink:0;transition:border-color .15s,color .15s,background .15s;}
+  .flag-btn.on{border-color:var(--amber);color:var(--amber);background:var(--amber-bg);}
+
+  /* Quiz layout: single column on phone, sidebar navigator on wide screens */
+  .quiz-layout{display:block;}
+  .quiz-main{min-width:0;}
+  .quiz-actions{display:flex;gap:10px;margin-top:6px;}
+  .quiz-actions .big-btn{flex:1;margin-top:0;min-width:0;}
+
+  /* Answer-sheet navigator */
+  .navigator{position:fixed;left:0;right:0;bottom:0;z-index:30;background:var(--card);
+    border-radius:20px 20px 0 0;padding:16px 16px calc(16px + env(safe-area-inset-bottom));
+    max-height:72vh;overflow:auto;transform:translateY(105%);transition:transform .28s ease;
+    box-shadow:0 -8px 30px rgba(0,0,0,.2);}
+  .navigator.open{transform:none;}
+  .nav-overlay{position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:29;opacity:0;pointer-events:none;transition:opacity .25s;}
+  .nav-overlay.show{opacity:1;pointer-events:auto;}
+  .nav-head{display:flex;align-items:center;justify-content:space-between;font-size:14px;font-weight:700;margin-bottom:12px;}
+  .nav-close{border:none;background:var(--bg);color:var(--sub);width:30px;height:30px;border-radius:50%;font-size:14px;cursor:pointer;}
+  .nav-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(42px,1fr));gap:7px;}
+  .nav-cell{aspect-ratio:1;border-radius:10px;border:1.5px solid var(--border);background:var(--bg);font-size:12.5px;font-weight:700;
+    color:var(--sub);cursor:pointer;display:flex;align-items:center;justify-content:center;position:relative;padding:0;}
+  .nav-cell.done{background:var(--chip-bg);border-color:var(--accent);color:var(--accent);}
+  .nav-cell.ok{background:var(--good-bg);border-color:var(--good);color:var(--good);}
+  .nav-cell.bad{background:var(--bad-bg);border-color:var(--bad);color:var(--bad);}
+  .nav-cell.flag::after{content:'';position:absolute;top:3px;right:3px;width:7px;height:7px;border-radius:50%;background:var(--amber);}
+  .nav-cell.cur{box-shadow:0 0 0 2.5px var(--accent);}
+  .nav-legend{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:11px;color:var(--sub);margin:12px 0 6px;}
+  .nav-legend .lg{display:inline-block;width:11px;height:11px;border-radius:4px;border:1.5px solid var(--border);
+    margin-right:4px;vertical-align:-1px;background:var(--bg);}
+  .nav-legend .lg.done{background:var(--chip-bg);border-color:var(--accent);}
+  .nav-legend .lg.flag{border-color:var(--amber);background:var(--amber-bg);}
+  .nav-legend .lg.ok{background:var(--good-bg);border-color:var(--good);}
+  .nav-legend .lg.bad{background:var(--bad-bg);border-color:var(--bad);}
+  .navigator .big-btn{margin-top:10px;}
+  .sheet-btn{display:flex;align-items:center;justify-content:center;gap:8px;}
   .q-text{font-size:17px;font-weight:600;line-height:1.55;margin-bottom:18px;}
   .ans-btn{display:flex;gap:10px;align-items:flex-start;width:100%;text-align:left;border:1.5px solid var(--border);background:var(--card);
     border-radius:14px;padding:13px 14px;margin-bottom:10px;cursor:pointer;font-size:14.5px;line-height:1.5;color:var(--text);}
@@ -184,18 +223,28 @@
     .ans-btn{font-size:15px;padding:15px 16px;}
     .card{padding:24px;}
   }
-  @media (min-width: 1080px){
-    .wrap{max-width:840px;}
+  @media (min-width: 1000px){
+    .wrap{max-width:980px;}
     .due-card{padding:26px 28px;}
     .due-card .n{font-size:40px;}
     .stat-box{padding:16px 10px;}
     .stat-box .n{font-size:24px;}
-    .quiz-top, .prog-bar{max-width:640px;margin-left:auto;margin-right:auto;}
-    #quiz .card, #results .card{max-width:640px;margin-left:auto;margin-right:auto;}
+    /* Home stays comfortably narrow even when the quiz goes wide */
+    #home, #setup, #wrongbank .card, #upgrade{max-width:720px;margin-left:auto;margin-right:auto;}
+    #results .card{max-width:680px;margin-left:auto;margin-right:auto;}
     .wrong-list-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
     .wrong-list-grid .wrong-item{margin-bottom:0;}
     .wrong-list-grid .section-title{grid-column:1/-1;}
     .wrong-list-grid .empty-state{grid-column:1/-1;}
+    /* Quiz becomes two columns: sticky answer sheet + question */
+    .quiz-layout{display:grid;grid-template-columns:260px minmax(0,1fr);gap:22px;align-items:start;}
+    .navigator{position:sticky;top:20px;transform:none;box-shadow:0 1px 4px rgba(0,0,0,.04);
+      border:1px solid var(--border);border-radius:18px;max-height:calc(100vh - 60px);z-index:1;padding:16px;}
+    .nav-close{display:none;}
+    .nav-overlay{display:none;}
+    .sheet-btn{display:none;}
+    .quiz-main .card{padding:26px 28px;}
+    .q-text{font-size:19px;}
   }
   @media (min-width: 700px) and (pointer:fine){
     .mode-btn:hover, .big-btn:hover, .ans-btn:not(:disabled):hover, .opt-pill:hover{ border-color:var(--accent); }
@@ -295,19 +344,47 @@
   <!-- QUIZ -->
   <div class="screen" id="quiz">
     <div class="quiz-top">
-      <span class="prog-txt" id="progTxt">1 / 20</span>
+      <button class="back-link" onclick="quitSession()">‹ Exit</button>
       <span class="cat-chip" id="quizCatChip">All</span>
+      <span class="prog-txt" id="progTxt">1 / 20</span>
     </div>
     <div class="prog-bar"><div class="prog-fill" id="progFill" style="width:0%"></div></div>
 
-    <div class="card">
-      <div class="q-id" id="qId">Question ID - 00000</div>
-      <div class="q-text" id="qText">…</div>
-      <div id="ansList"></div>
-      <div class="ref-box" id="refBox"></div>
-      <button class="big-btn" id="submitBtn" disabled onclick="submitAnswer()">Submit</button>
-      <button class="big-btn" id="nextBtn" style="display:none;" onclick="nextQuestion()">Next</button>
-      <button class="report-link" id="reportLink" onclick="reportCurrentQuestion()">🚩 Something wrong with this question?</button>
+    <div class="quiz-layout">
+      <aside class="navigator" id="navigator">
+        <div class="nav-head">
+          <span>Answer Sheet</span>
+          <button class="nav-close" onclick="toggleNav(false)">✕</button>
+        </div>
+        <div class="nav-grid" id="navGrid"></div>
+        <div class="nav-legend">
+          <span><i class="lg done"></i>Answered</span>
+          <span><i class="lg flag" style="position:relative;"></i>Flagged</span>
+          <span><i class="lg ok"></i>Correct</span>
+          <span><i class="lg bad"></i>Wrong</span>
+        </div>
+        <button class="big-btn" id="finishBtn" onclick="finishExam(false)">Submit Paper</button>
+      </aside>
+      <div class="nav-overlay" id="navOverlay" onclick="toggleNav(false)"></div>
+
+      <div class="quiz-main">
+        <div class="card">
+          <div class="q-head">
+            <div class="q-id" id="qId" style="margin-bottom:0;">Question ID - 00000</div>
+            <button class="flag-btn" id="flagBtn" onclick="toggleFlag()">🚩 Flag</button>
+          </div>
+          <div class="q-text" id="qText">…</div>
+          <div id="ansList"></div>
+          <div class="ref-box" id="refBox"></div>
+          <div class="quiz-actions">
+            <button class="big-btn secondary" id="prevBtn" onclick="prevQuestion()">‹ Prev</button>
+            <button class="big-btn" id="submitBtn" disabled onclick="submitAnswer()">Check</button>
+            <button class="big-btn" id="nextBtn" onclick="nextQuestion()">Next ›</button>
+          </div>
+          <button class="report-link" id="reportLink" onclick="reportCurrentQuestion()">🚩 Something wrong with this question?</button>
+        </div>
+        <button class="big-btn secondary sheet-btn" id="sheetBtn" onclick="toggleNav(true)">🗂 Answer Sheet <span id="sheetCount"></span></button>
+      </div>
     </div>
   </div>
 
@@ -322,6 +399,7 @@
       </div>
       <div class="result-summary" id="resultSummary">0 questions, 0 correct</div>
       <button class="big-btn" id="reviewWrongBtn" onclick="reviewWrongFromResults()">Review this session's mistakes</button>
+      <button class="big-btn secondary" onclick="backToPaper()">Review the paper (wrong in red)</button>
       <button class="big-btn secondary" onclick="show('home');renderHome();">Back to Home</button>
       <div class="memory-tip" id="resultsMemoryTip"></div>
     </div>
@@ -573,10 +651,35 @@ function renderHome(){
 // ══════════════════════════════════════════════════════════════
 // Session setup
 // ══════════════════════════════════════════════════════════════
-var SESSION = null; // {mode, catKey, list, idx, results:[{q,chosen,correct}]}
+// SESSION.states is parallel to SESSION.list — one {chosen, flagged, revealed, graded}
+// per question, so you can jump around freely and everything is remembered.
+// instant=true → practice style (check each question as you go)
+// instant=false → exam style (answer freely, then Submit Paper grades everything)
+var SESSION = null;
 var SETUP_CAT = 'all';
 var SETUP_COUNT = 30;
 var SMART_ON = true;
+
+function newSession(mode, instant, catKey, list, label){
+  SESSION = {
+    mode:mode, instant:instant, catKey:catKey, list:list, idx:0, finished:false, results:[],
+    states:list.map(function(){ return {chosen:null, flagged:false, revealed:false, graded:false}; })
+  };
+  document.getElementById('quizCatChip').textContent = label;
+  buildNavGrid();
+  toggleNav(false);
+  renderQuestion();
+  show('quiz');
+}
+
+function quitSession(){
+  if(SESSION && !SESSION.finished){
+    var answered = SESSION.states.filter(function(s){return s.chosen!==null;}).length;
+    if(answered>0 && !confirm('Leave this session? Your answers in it will be lost.')) return;
+  }
+  SESSION = null;
+  show('home'); renderHome();
+}
 
 function openSetup(mode){
   document.getElementById('setupTitle').textContent = 'Practice';
@@ -647,20 +750,14 @@ function startSession(){
   var count = SETUP_COUNT==='all' ? pool.length : SETUP_COUNT;
   var list = SMART_ON ? pickForReview(pool, count) : pickRandom(pool, count);
   if(list.length===0){ alert('No questions in this category'); return; }
-  SESSION = { mode:'practice', catKey:SETUP_CAT, list:list, idx:0, results:[] };
-  document.getElementById('quizCatChip').textContent = CATS[SETUP_CAT].label + ' · Practice';
-  renderQuestion();
-  show('quiz');
+  newSession('practice', true, SETUP_CAT, list, CATS[SETUP_CAT].label + ' · Practice');
 }
 
 function startFixedExam(catKey, count, label){
   var pool = QUESTIONS.filter(CATS[catKey].match);
   var list = pickRandom(pool, count);
   if(list.length===0){ alert('No questions in this category'); return; }
-  SESSION = { mode:'exam', catKey:catKey, list:list, idx:0, results:[] };
-  document.getElementById('quizCatChip').textContent = label;
-  renderQuestion();
-  show('quiz');
+  newSession('exam', false, catKey, list, label);
 }
 
 function startDueReview(){
@@ -668,50 +765,107 @@ function startDueReview(){
   var pool = QUESTIONS.filter(function(q){ var c = CARDS[q.id]; return c && c.seen>0 && c.due<=now; });
   if(pool.length===0){ return; }
   var list = pickForReview(pool, Math.min(pool.length, 100));
-  SESSION = { mode:'review', catKey:'all', list:list, idx:0, results:[] };
-  document.getElementById('quizCatChip').textContent = 'Due Review';
-  renderQuestion();
-  show('quiz');
+  newSession('review', true, 'all', list, 'Due Review');
 }
 
 function practiceAllWrong(){
   var ids = Object.keys(CARDS).filter(function(id){ return needsWork(CARDS[id]); });
   var pool = QUESTIONS.filter(function(q){ return ids.indexOf(q.id)>=0; });
   if(pool.length===0){ alert('No mistakes yet'); return; }
-  SESSION = { mode:'wrongbank', catKey:'all', list: shuffle(pool), idx:0, results:[] };
-  document.getElementById('quizCatChip').textContent = 'Mistake Review';
-  renderQuestion();
-  show('quiz');
+  newSession('wrongbank', true, 'all', shuffle(pool), 'Mistake Review');
 }
 function reviewWrongFromResults(){
   var wrongQs = SESSION.results.filter(function(r){return !r.correct;}).map(function(r){return r.q;});
   if(wrongQs.length===0){ show('home'); renderHome(); return; }
-  SESSION = { mode:'wrongbank', catKey:'all', list: shuffle(wrongQs), idx:0, results:[] };
-  document.getElementById('quizCatChip').textContent = 'Mistake Review';
+  newSession('wrongbank', true, 'all', shuffle(wrongQs), 'Mistake Review');
+}
+function backToPaper(){
+  if(!SESSION){ show('home'); renderHome(); return; }
+  SESSION.idx = 0;
   renderQuestion();
   show('quiz');
 }
 
 // ══════════════════════════════════════════════════════════════
-// Quiz: select an answer, then Submit reveals grading + reference
+// Quiz: answer-sheet navigator, flagging, free navigation.
+// Practice (instant): Check grades each question as you go.
+// Exam: answer in any order, flag the unsure ones, Submit Paper
+// grades everything — then the sheet shows wrong ones in red and
+// you can jump straight to them.
 // ══════════════════════════════════════════════════════════════
-var PICKED_LETTER = null;
+function buildNavGrid(){
+  var grid = document.getElementById('navGrid');
+  grid.innerHTML = '';
+  SESSION.list.forEach(function(q, i){
+    var cell = document.createElement('button');
+    cell.className = 'nav-cell';
+    cell.textContent = i+1;
+    cell.onclick = function(){ jumpTo(i); };
+    grid.appendChild(cell);
+  });
+}
+
+function updateNav(){
+  var cells = document.querySelectorAll('#navGrid .nav-cell');
+  var answered = 0;
+  SESSION.states.forEach(function(st, i){
+    var cell = cells[i]; if(!cell) return;
+    var q = SESSION.list[i];
+    cell.className = 'nav-cell';
+    var showGrade = SESSION.finished || st.revealed;
+    if(showGrade && st.chosen!==null){
+      cell.classList.add(st.chosen===q.answer ? 'ok' : 'bad');
+    } else if(SESSION.finished && st.chosen===null){
+      cell.classList.add('bad');
+    } else if(st.chosen!==null){
+      cell.classList.add('done');
+    }
+    if(st.flagged && !SESSION.finished) cell.classList.add('flag');
+    if(i===SESSION.idx) cell.classList.add('cur');
+    if(st.chosen!==null) answered++;
+  });
+  document.getElementById('progTxt').textContent = answered + ' / ' + SESSION.list.length + ' answered';
+  document.getElementById('progFill').style.width = Math.round(answered/SESSION.list.length*100) + '%';
+  document.getElementById('sheetCount').textContent = '(' + answered + '/' + SESSION.list.length + ')';
+  document.getElementById('finishBtn').style.display = SESSION.finished ? 'none' : 'block';
+}
+
+function jumpTo(i){
+  SESSION.idx = i;
+  toggleNav(false);
+  renderQuestion();
+}
+function toggleNav(open){
+  document.getElementById('navigator').classList.toggle('open', !!open);
+  document.getElementById('navOverlay').classList.toggle('show', !!open);
+}
+function toggleFlag(){
+  var st = SESSION.states[SESSION.idx];
+  st.flagged = !st.flagged;
+  document.getElementById('flagBtn').classList.toggle('on', st.flagged);
+  updateNav();
+}
 
 function renderQuestion(){
-  PICKED_LETTER = null;
   var q = SESSION.list[SESSION.idx];
-  document.getElementById('progTxt').textContent = (SESSION.idx+1) + ' / ' + SESSION.list.length;
-  document.getElementById('progFill').style.width = Math.round((SESSION.idx)/SESSION.list.length*100) + '%';
+  var st = SESSION.states[SESSION.idx];
+  var graded = SESSION.finished || st.revealed;
+
   document.getElementById('qId').textContent = 'Question ID - ' + q.id + (q.lastEdit ? (' · updated ' + q.lastEdit) : '');
   document.getElementById('qText').textContent = q.question;
+
+  var flagBtn = document.getElementById('flagBtn');
+  flagBtn.style.display = SESSION.finished ? 'none' : 'inline-block';
+  flagBtn.classList.toggle('on', st.flagged);
+
   var refBox = document.getElementById('refBox');
-  refBox.className = 'ref-box';
-  refBox.innerHTML = '';
-  document.getElementById('nextBtn').style.display = 'none';
-  document.getElementById('reportLink').style.display = 'none';
-  var submitBtn = document.getElementById('submitBtn');
-  submitBtn.style.display = 'block';
-  submitBtn.disabled = true;
+  if(graded && q.reference){
+    refBox.className = 'ref-box show';
+    refBox.innerHTML = '<b>Reference: </b>' + escapeHtml(q.reference);
+  } else {
+    refBox.className = 'ref-box';
+    refBox.innerHTML = '';
+  }
 
   var list = document.getElementById('ansList');
   list.innerHTML = '';
@@ -720,10 +874,39 @@ function renderQuestion(){
     var btn = document.createElement('button');
     btn.className = 'ans-btn';
     btn.innerHTML = '<span class="lt">'+letter+'</span><span>'+escapeHtml(q.options[letter])+'</span>';
-    btn.onclick = function(){ pickAnswer(letter); };
+    if(graded){
+      btn.disabled = true;
+      if(letter === q.answer) btn.classList.add('correct');
+      else if(letter === st.chosen) btn.classList.add('wrong');
+      else btn.classList.add('dim');
+    } else {
+      if(letter === st.chosen) btn.classList.add('picked');
+      btn.onclick = function(){ pickAnswer(letter); };
+    }
     list.appendChild(btn);
   });
+
+  // Buttons
+  var last = SESSION.idx+1 >= SESSION.list.length;
+  document.getElementById('prevBtn').disabled = SESSION.idx===0;
+  var submitBtn = document.getElementById('submitBtn');
+  var nextBtn = document.getElementById('nextBtn');
+  if(SESSION.finished){
+    submitBtn.style.display = 'none';
+    nextBtn.textContent = last ? 'See Results' : 'Next ›';
+  } else if(SESSION.instant){
+    submitBtn.style.display = st.revealed ? 'none' : 'block';
+    submitBtn.disabled = st.chosen===null;
+    nextBtn.textContent = last ? 'Finish' : 'Next ›';
+  } else {
+    submitBtn.style.display = 'none';
+    nextBtn.textContent = last ? 'Submit Paper' : 'Next ›';
+  }
+  document.getElementById('reportLink').style.display = graded ? 'inline-flex' : 'none';
+  updateNav();
+  window.scrollTo(0,0);
 }
+
 function escapeHtml(s){
   return String(s).replace(/[&<>"]/g, function(c){
     return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];
@@ -731,52 +914,64 @@ function escapeHtml(s){
 }
 
 function pickAnswer(letter){
-  PICKED_LETTER = letter;
+  var st = SESSION.states[SESSION.idx];
+  if(st.revealed || SESSION.finished) return;
+  st.chosen = letter;
   document.querySelectorAll('#ansList .ans-btn').forEach(function(btn){
     var lt = btn.querySelector('.lt').textContent;
     btn.classList.toggle('picked', lt===letter);
   });
   document.getElementById('submitBtn').disabled = false;
+  updateNav();
 }
 
+// Practice-mode per-question check
 function submitAnswer(){
-  if(!PICKED_LETTER) return;
+  var st = SESSION.states[SESSION.idx];
+  if(st.chosen===null || st.revealed) return;
   var q = SESSION.list[SESSION.idx];
-  var letter = PICKED_LETTER;
-  var correct = letter === q.answer;
-  var buttons = document.querySelectorAll('#ansList .ans-btn');
-  buttons.forEach(function(btn){
-    btn.disabled = true;
-    btn.classList.remove('picked');
-    var lt = btn.querySelector('.lt').textContent;
-    if(lt === q.answer) btn.classList.add('correct');
-    else if(lt === letter) btn.classList.add('wrong');
-    else btn.classList.add('dim');
-  });
-
-  if(q.reference){
-    var refBox = document.getElementById('refBox');
-    refBox.className = 'ref-box show';
-    refBox.innerHTML = '<b>Reference: </b>' + escapeHtml(q.reference);
-  }
-
-  gradeSM2(q.id, correct);
+  st.revealed = true;
+  if(!st.graded){ gradeSM2(q.id, st.chosen===q.answer); st.graded = true; }
   bumpStreak();
+  renderQuestion();
+}
 
-  SESSION.results.push({ q:q, chosen:letter, correct:correct });
-  document.getElementById('submitBtn').style.display = 'none';
-  document.getElementById('reportLink').style.display = 'inline-flex';
-  document.getElementById('nextBtn').textContent = (SESSION.idx+1 < SESSION.list.length) ? 'Next' : 'See Results';
-  document.getElementById('nextBtn').style.display = 'block';
+function prevQuestion(){
+  if(SESSION.idx===0) return;
+  SESSION.idx--;
+  renderQuestion();
 }
 
 function nextQuestion(){
-  SESSION.idx++;
-  if(SESSION.idx >= SESSION.list.length){
-    showResults();
-  } else {
-    renderQuestion();
+  var last = SESSION.idx+1 >= SESSION.list.length;
+  if(last){
+    if(SESSION.finished){ showResults(); }
+    else { finishExam(false); }
+    return;
   }
+  SESSION.idx++;
+  renderQuestion();
+}
+
+// Grade the whole paper
+function finishExam(force){
+  if(SESSION.finished){ showResults(); return; }
+  var unanswered = SESSION.states.filter(function(s){return s.chosen===null;}).length;
+  if(unanswered>0 && !force){
+    if(!confirm(unanswered + ' question(s) unanswered — they will be marked wrong. Submit anyway?')) return;
+  }
+  SESSION.results = [];
+  SESSION.states.forEach(function(st, i){
+    var q = SESSION.list[i];
+    var correct = st.chosen === q.answer;
+    if(st.chosen!==null && !st.graded){ gradeSM2(q.id, correct); st.graded = true; }
+    st.revealed = true;
+    SESSION.results.push({ q:q, chosen:st.chosen, correct:correct });
+  });
+  SESSION.finished = true;
+  bumpStreak();
+  toggleNav(false);
+  showResults();
 }
 
 function showResults(){
@@ -804,10 +999,13 @@ function showResults(){
     wrongOnes.forEach(function(r){
       var div = document.createElement('div');
       div.className = 'wrong-item';
+      var yourLine = r.chosen===null
+        ? '<div class="line bad">Your answer: — (unanswered)</div>'
+        : '<div class="line bad">Your answer: '+r.chosen+'. '+escapeHtml(r.q.options[r.chosen]||'')+'</div>';
       div.innerHTML =
         '<div class="qid">Question ID - '+r.q.id+'</div>' +
         '<div class="qtext">'+escapeHtml(r.q.question)+'</div>' +
-        '<div class="line bad">Your answer: '+r.chosen+'. '+escapeHtml(r.q.options[r.chosen]||'')+'</div>' +
+        yourLine +
         '<div class="line good">Correct answer: '+r.q.answer+'. '+escapeHtml(r.q.options[r.q.answer]||'')+'</div>' +
         (r.q.reference ? '<div class="ref">Reference: '+escapeHtml(r.q.reference)+'</div>' : '');
       listEl.appendChild(div);
