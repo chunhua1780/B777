@@ -3,22 +3,24 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<meta name="theme-color" content="#12213b">
+<meta name="theme-color" content="#f2f2f7">
 <title>B777 Question Bank</title>
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon192.png">
 <style>
   :root{
-    --bg:#f6f5f2; --card:#ffffff; --text:#242424; --sub:#767671; --accent:#4a63d6; --border:rgba(60,55,45,.11);
-    --chip-bg:rgba(74,99,214,.09); --good:#1f9d5c; --good-bg:rgba(31,157,92,.10);
-    --bad:#d64f4f; --bad-bg:rgba(214,79,79,.10); --amber:#b7791f; --amber-bg:rgba(183,121,31,.10);
-    --due-grad:linear-gradient(135deg,#4a63d6,#7b8ff0);
+    /* Apple system palette (iOS light) */
+    --bg:#f2f2f7; --card:#ffffff; --text:#1d1d1f; --sub:#86868b; --accent:#007aff; --border:rgba(60,60,67,.12);
+    --chip-bg:rgba(0,122,255,.10); --good:#34c759; --good-bg:rgba(52,199,89,.12);
+    --bad:#ff3b30; --bad-bg:rgba(255,59,48,.10); --amber:#ff9500; --amber-bg:rgba(255,149,0,.13);
+    --due-grad:linear-gradient(135deg,#007aff,#5ac8fa);
   }
   @media (prefers-color-scheme: dark){
-    :root{ --bg:#15171c; --card:#1e2128; --text:#eceae4; --sub:#9a9a94; --accent:#7c95ff; --border:rgba(255,255,255,.09);
-      --chip-bg:rgba(124,149,255,.14); --good:#4cc985; --good-bg:rgba(76,201,133,.14);
-      --bad:#f0797a; --bad-bg:rgba(240,121,122,.14); --amber:#e0ab52; --amber-bg:rgba(224,171,82,.14);
-      --due-grad:linear-gradient(135deg,#3c4d9e,#5f6fc9); }
+    /* iOS dark */
+    :root{ --bg:#000000; --card:#1c1c1e; --text:#f5f5f7; --sub:#98989d; --accent:#0a84ff; --border:rgba(255,255,255,.10);
+      --chip-bg:rgba(10,132,255,.16); --good:#30d158; --good-bg:rgba(48,209,88,.16);
+      --bad:#ff453a; --bad-bg:rgba(255,69,58,.15); --amber:#ff9f0a; --amber-bg:rgba(255,159,10,.15);
+      --due-grad:linear-gradient(135deg,#0a84ff,#64d2ff); }
   }
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
   html,body{height:100%;}
@@ -56,13 +58,15 @@
   .stat-box .n{font-size:20px;font-weight:700;}
   .stat-box .l{font-size:10.5px;color:var(--sub);margin-top:2px;}
 
-  .card{background:var(--card);border:1px solid var(--border);border-radius:18px;padding:18px;margin-bottom:14px;box-shadow:0 1px 4px rgba(0,0,0,.04);}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:20px;padding:18px;margin-bottom:14px;
+    box-shadow:0 1px 2px rgba(0,0,0,.03),0 8px 24px rgba(0,0,0,.05);}
   .card h2{font-size:16px;margin:0 0 4px;}
   .card .desc{font-size:13px;color:var(--sub);margin:0 0 14px;line-height:1.55;}
 
   .mode-btn{display:flex;align-items:center;gap:14px;width:100%;border:none;background:var(--card);border:1px solid var(--border);
-    border-radius:18px;padding:16px;margin-bottom:12px;cursor:pointer;text-align:left;box-shadow:0 1px 4px rgba(0,0,0,.04);}
-  .mode-btn:active{opacity:.7;}
+    border-radius:20px;padding:16px;margin-bottom:12px;cursor:pointer;text-align:left;box-shadow:0 1px 2px rgba(0,0,0,.03),0 8px 24px rgba(0,0,0,.05);}
+  .mode-btn{transition:transform .15s cubic-bezier(.32,1.4,.55,1),box-shadow .2s;}
+  .mode-btn:active{transform:scale(.977);}
   .mode-btn .ic{width:46px;height:46px;border-radius:13px;display:flex;align-items:center;justify-content:center;font-size:21px;flex-shrink:0;}
   .mode-btn.practice .ic{background:var(--chip-bg);}
   .mode-btn.theory .ic{background:var(--amber-bg);}
@@ -79,11 +83,12 @@
     background:var(--card);font-size:13.5px;font-weight:600;cursor:pointer;color:var(--text);}
   .opt-pill.sel{border-color:var(--accent);background:var(--chip-bg);color:var(--accent);}
 
-  .big-btn{display:block;width:100%;border:none;border-radius:16px;padding:15px;font-size:15.5px;font-weight:700;cursor:pointer;
-    background:var(--accent);color:#fff;margin-top:6px;}
+  .big-btn{display:block;width:100%;border:none;border-radius:14px;padding:15px;font-size:15.5px;font-weight:600;cursor:pointer;
+    background:var(--accent);color:#fff;margin-top:6px;letter-spacing:-.01em;
+    transition:transform .15s cubic-bezier(.32,1.4,.55,1),opacity .15s,box-shadow .2s;}
   .big-btn:disabled{opacity:.35;}
   .big-btn.secondary{background:var(--chip-bg);color:var(--accent);}
-  .big-btn:active{opacity:.75;}
+  .big-btn:not(:disabled):active{transform:scale(.965);opacity:.9;}
   .back-link{display:inline-flex;align-items:center;gap:4px;color:var(--sub);font-size:14px;background:none;border:none;cursor:pointer;padding:6px 0;margin-bottom:10px;}
 
   .toggle-row{display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--border);}
@@ -454,44 +459,85 @@ var CATS = {
 };
 
 // ══════════════════════════════════════════════════════════════
-// SM-2 spaced-repetition memory model
-// Each card: seen, wrong, ef (easiness factor), reps (consecutive
-// correct answers), interval (days), due (timestamp ms).
-// On every answer we grade quality on SM-2's 0-5 scale (wrong=2,
-// correct=4) and reschedule the next-due date, same core algorithm
-// Anki/SuperMemo popularized. At this dataset size (~1000 questions)
-// research shows the newer FSRS algorithm performs about the same as
-// SM-2 until it has thousands of reviews to fit a personal model, so
-// SM-2 is the right, well-proven choice here.
+// Memory scheduling — FSRS-4.5 (Free Spaced Repetition Scheduler),
+// the algorithm modern Anki ships as its default. Each question
+// carries a memory Stability S (days until recall drops to 90%)
+// and a Difficulty D (1-10). The default weights below were fit on
+// hundreds of millions of real reviews and beat SM-2 in benchmarks
+// even without personalization. Wrong = "Again" (stability
+// collapses, question comes back ~10 min later, then next day);
+// correct = "Good" (stability grows; next review ≈ S days out,
+// right before the forgetting curve dips under 90%).
 // ══════════════════════════════════════════════════════════════
-var SM2_KEY = 'b777_sm2_v2';
+var FSRS_KEY = 'b777_fsrs_v1';
+var OLD_SM2_KEY = 'b777_sm2_v2';
+var FW = [0.4872,1.4003,3.7145,13.8206,5.1618,1.2298,0.8975,0.031,1.6474,0.1367,1.0461,2.1072,0.0793,0.3246,1.587,0.2272,2.8755];
+var F_DECAY = -0.5, F_FACTOR = 19/81;
+
 var CARDS = {};
-try{ CARDS = JSON.parse(localStorage.getItem(SM2_KEY)||'{}'); }catch(e){ CARDS = {}; }
-function saveCards(){ try{ localStorage.setItem(SM2_KEY, JSON.stringify(CARDS)); }catch(e){} }
+try{ CARDS = JSON.parse(localStorage.getItem(FSRS_KEY)||'{}'); }catch(e){ CARDS = {}; }
+function saveCards(){ try{ localStorage.setItem(FSRS_KEY, JSON.stringify(CARDS)); }catch(e){} }
+// One-time migration from the old SM-2 store: history is kept,
+// interval maps to stability and ease maps to difficulty.
+if(Object.keys(CARDS).length===0){
+  try{
+    var _old = JSON.parse(localStorage.getItem(OLD_SM2_KEY)||'{}');
+    Object.keys(_old).forEach(function(id){
+      var o = _old[id];
+      CARDS[id] = { seen:o.seen||0, wrong:o.wrong||0, reps:o.reps||0, lapses:o.wrong||0,
+        S:Math.max(0.5, o.interval||1), D:Math.min(10, Math.max(1, 11-2*(o.ef||2.5))),
+        last:Date.now(), due:o.due||0 };
+    });
+    if(Object.keys(CARDS).length>0) saveCards();
+  }catch(e){}
+}
 function getCard(id){
-  if(!CARDS[id]) CARDS[id] = { seen:0, wrong:0, ef:2.5, reps:0, interval:0, due:0 };
+  if(!CARDS[id]) CARDS[id] = { seen:0, wrong:0, reps:0, lapses:0, S:0, D:0, last:0, due:0 };
   return CARDS[id];
 }
+// Retrievability: probability you still remember it right now
+function fsrsR(c, now){
+  if(!c.S || !c.last) return 0;
+  var t = Math.max(0, (now - c.last)/86400000);
+  return Math.pow(1 + F_FACTOR * t / c.S, F_DECAY);
+}
+// Grade: correct → Good(3), wrong → Again(1). Name kept from the
+// old SM-2 version so call sites don't change.
 function gradeSM2(id, correct){
   var c = getCard(id);
+  var now = Date.now();
   c.seen++;
-  var quality = correct ? 4 : 2;
-  if(!correct){
-    c.wrong++;
-    c.reps = 0;
-    c.interval = 1;
+  if(!correct) c.wrong++;
+  var G = correct ? 3 : 1;
+
+  if(c.reps===0 || !c.S){
+    c.S = FW[G-1];
+    c.D = Math.min(10, Math.max(1, FW[4] - Math.exp(FW[5]*(G-1)) + 1));
   } else {
-    if(c.reps===0) c.interval = 1;
-    else if(c.reps===1) c.interval = 6;
-    else c.interval = Math.round(c.interval * c.ef);
-    c.reps++;
+    var R = fsrsR(c, now);
+    var D0good = FW[4] - Math.exp(FW[5]*2) + 1;
+    var Dp = c.D - FW[6]*(G-3);
+    c.D = Math.min(10, Math.max(1, FW[7]*D0good + (1-FW[7])*Dp));
+    if(correct){
+      c.S = c.S * (Math.exp(FW[8]) * (11-c.D) * Math.pow(c.S,-FW[9]) *
+            (Math.exp(FW[10]*(1-R)) - 1) + 1);
+    } else {
+      c.lapses = (c.lapses||0)+1;
+      var Sf = FW[11] * Math.pow(c.D,-FW[12]) *
+               (Math.pow(c.S+1,FW[13]) - 1) * Math.exp(FW[14]*(1-R));
+      c.S = Math.min(c.S, Math.max(0.1, Sf));
+    }
   }
-  c.ef = Math.max(1.3, c.ef + (0.1 - (5-quality)*(0.08+(5-quality)*0.02)));
-  c.due = Date.now() + c.interval*86400000;
+  c.reps++;
+  c.last = now;
+  // At 90% target retention the next interval equals S days;
+  // a miss comes back in ~10 minutes so it gets re-drilled today.
+  c.due = correct ? now + Math.max(1, Math.round(c.S))*86400000
+                  : now + 600000;
   saveCards();
   return c;
 }
-function isMastered(c){ return c.reps>=2 && c.ef>=2.3; }
+function isMastered(c){ return c.reps>=2 && c.S>=21; }
 function needsWork(c){ return c.wrong>0 && c.wrong >= (c.seen - c.wrong); }
 
 // ══════════════════════════════════════════════════════════════
