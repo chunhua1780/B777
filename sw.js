@@ -1,5 +1,5 @@
-const CACHE = 'b777-v4';
-const ASSETS = ['./index.html', './questions.js', './manifest.json', './icon192.png', './icon512.png'];
+const CACHE = 'b777-v5';
+const ASSETS = ['./', './index.html', './questions.js', './manifest.json', './icon192.png', './icon512.png'];
 
 self.addEventListener('install', function(e){
   e.waitUntil(caches.open(CACHE).then(function(c){ return c.addAll(ASSETS); }));
@@ -18,14 +18,17 @@ self.addEventListener('activate', function(e){
 self.addEventListener('fetch', function(e){
   if(e.request.method !== 'GET') return;
   e.respondWith(
-    caches.match(e.request).then(function(cached){
+    caches.match(e.request, {ignoreSearch:true}).then(function(cached){
       if(cached) return cached;
       return fetch(e.request).then(function(resp){
         return caches.open(CACHE).then(function(c){
           c.put(e.request, resp.clone());
           return resp;
         });
-      }).catch(function(){ return cached; });
+      }).catch(function(){
+        // Offline navigation (e.g. opening the app root) → app shell
+        if(e.request.mode === 'navigate') return caches.match('./index.html');
+      });
     })
   );
 });

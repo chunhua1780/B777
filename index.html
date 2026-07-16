@@ -253,14 +253,26 @@
     .q-text{font-size:19px;}
     .ans-btn{font-size:15px;padding:15px 16px;}
     .card{padding:24px;}
-    /* iPad & up: CIIC-style answer sheet fixed on the LEFT */
+    /* iPad & up: CIIC-style answer sheet pinned to the far LEFT
+       of the browser window, narrow, all rows visible at once */
     .wrap{max-width:850px;}
-    .quiz-layout{display:grid;grid-template-columns:185px minmax(0,1fr);gap:18px;align-items:start;}
-    .navigator{position:sticky;top:16px;transform:none;box-shadow:0 1px 2px rgba(0,0,0,.03);
-      border:1px solid var(--border);border-radius:16px;max-height:calc(100vh - 40px);z-index:1;padding:12px;}
+    .quiz-layout{display:block;}
+    .navigator{position:fixed;left:0;top:0;bottom:0;width:146px;max-height:none;transform:none;
+      box-shadow:none;border:none;border-right:1px solid var(--border);border-radius:0;
+      padding:12px 8px calc(12px + env(safe-area-inset-bottom));overflow-y:auto;z-index:5;}
     .nav-close{display:none;}
     .nav-overlay{display:none;}
     .sheet-btn{display:none;}
+    .nav-legend{display:none;}
+    .nav-head{font-size:12px;margin-bottom:8px;}
+    .nav-row{height:24px;font-size:11.5px;padding:0 7px;gap:6px;}
+    .nav-row .num{width:20px;}
+    .nav-row .rmk{width:13px;height:13px;font-size:9px;}
+    .nav-colhead{padding:4px 7px;font-size:9.5px;}
+    .navigator .big-btn{padding:9px;font-size:12px;border-radius:10px;}
+    /* Push quiz content clear of the fixed sheet only when the
+       centered layout would otherwise slide underneath it */
+    #quiz{padding-left:max(0px, 156px - max(0px, (100vw - 850px)/2));}
   }
   @media (min-width: 1000px){
     .wrap{max-width:980px;}
@@ -275,8 +287,7 @@
     .wrong-list-grid .wrong-item{margin-bottom:0;}
     .wrong-list-grid .section-title{grid-column:1/-1;}
     .wrong-list-grid .empty-state{grid-column:1/-1;}
-    .quiz-layout{grid-template-columns:210px minmax(0,1fr);gap:22px;}
-    .navigator{padding:14px;}
+    #quiz{padding-left:max(0px, 156px - max(0px, (100vw - 980px)/2));}
     .quiz-main .card{padding:26px 28px;}
     .q-text{font-size:19px;}
   }
@@ -396,11 +407,11 @@
           <button class="nav-close" onclick="toggleNav(false)">✕</button>
         </div>
         <div class="nav-list" id="navGrid">
-          <div class="nav-colhead"><span>No.</span><span class="rh">Remark</span></div>
+          <div class="nav-colhead"><span>No.</span><span class="rh">Unsure</span></div>
         </div>
         <div class="nav-legend">
           <span><i class="lg done"></i>Answered</span>
-          <span><i class="lg flag"></i>Remarked</span>
+          <span><i class="lg flag"></i>Unsure</span>
           <span><i class="lg ok"></i>Correct</span>
           <span><i class="lg bad"></i>Wrong</span>
         </div>
@@ -412,7 +423,7 @@
         <div class="card">
           <div class="q-head">
             <div class="q-id" id="qId" style="margin-bottom:0;">Question ID - 00000</div>
-            <button class="flag-btn" id="flagBtn" onclick="toggleFlag()">✓ Remark</button>
+            <button class="flag-btn" id="flagBtn" onclick="toggleFlag()">? Unsure</button>
           </div>
           <div class="q-text" id="qText">…</div>
           <div id="ansList"></div>
@@ -899,7 +910,7 @@ function backToPaper(){
 // ══════════════════════════════════════════════════════════════
 function buildNavGrid(){
   var grid = document.getElementById('navGrid');
-  grid.innerHTML = '<div class="nav-colhead"><span>No.</span><span class="rh">Remark</span></div>';
+  grid.innerHTML = '<div class="nav-colhead"><span>No.</span><span class="rh">Unsure</span></div>';
   SESSION.list.forEach(function(q, i){
     var row = document.createElement('button');
     row.className = 'nav-row';
