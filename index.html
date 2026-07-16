@@ -257,9 +257,13 @@
        of the browser window, narrow, all rows visible at once */
     .wrap{max-width:850px;}
     .quiz-layout{display:block;}
-    .navigator{position:fixed;left:0;top:0;bottom:0;width:146px;max-height:none;transform:none;
+    .navigator{position:fixed;left:0;top:0;bottom:0;width:118px;max-height:none;transform:none;
       box-shadow:none;border:none;border-right:1px solid var(--border);border-radius:0;
-      padding:12px 8px calc(12px + env(safe-area-inset-bottom));overflow-y:auto;z-index:5;}
+      padding:12px 8px calc(10px + env(safe-area-inset-bottom));overflow:hidden;z-index:5;
+      display:flex;flex-direction:column;}
+    .navigator .nav-list{flex:1;min-height:0;overflow-y:auto;}
+    .navigator .big-btn{margin-top:10px;flex-shrink:0;}
+    .quiz-main{max-width:660px;margin:0 auto;}
     .nav-close{display:none;}
     .nav-overlay{display:none;}
     .sheet-btn{display:none;}
@@ -272,7 +276,7 @@
     .navigator .big-btn{padding:9px;font-size:12px;border-radius:10px;}
     /* Push quiz content clear of the fixed sheet only when the
        centered layout would otherwise slide underneath it */
-    #quiz{padding-left:max(0px, 156px - max(0px, (100vw - 850px)/2));}
+    #quiz{padding-left:max(0px, 128px - max(0px, (100vw - 850px)/2));}
   }
   @media (min-width: 1000px){
     .wrap{max-width:980px;}
@@ -287,7 +291,7 @@
     .wrong-list-grid .wrong-item{margin-bottom:0;}
     .wrong-list-grid .section-title{grid-column:1/-1;}
     .wrong-list-grid .empty-state{grid-column:1/-1;}
-    #quiz{padding-left:max(0px, 156px - max(0px, (100vw - 980px)/2));}
+    #quiz{padding-left:max(0px, 128px - max(0px, (100vw - 980px)/2));}
     .quiz-main .card{padding:26px 28px;}
     .q-text{font-size:19px;}
   }
@@ -781,6 +785,7 @@ function newSession(mode, instant, catKey, list, label){
     states:list.map(function(){ return {chosen:null, flagged:false, revealed:false, graded:false}; })
   };
   document.getElementById('quizCatChip').textContent = label;
+  document.getElementById('finishBtn').textContent = mode==='exam' ? 'End Exam' : 'End Practice';
   buildNavGrid();
   toggleNav(false);
   renderQuestion();
@@ -1034,7 +1039,7 @@ function renderQuestion(){
     nextBtn.textContent = last ? 'Finish' : 'Next ›';
   } else {
     submitBtn.style.display = 'none';
-    nextBtn.textContent = last ? 'Submit Paper' : 'Next ›';
+    nextBtn.textContent = last ? (SESSION.mode==='exam' ? 'End Exam' : 'End Practice') : 'Next ›';
   }
   document.getElementById('reportLink').style.display = graded ? 'inline-flex' : 'none';
   updateNav();
