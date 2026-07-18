@@ -352,12 +352,8 @@
         <div><h1>B777 Question Bank</h1><div class="sub" id="authSub">Sign in to start studying</div></div>
       </div>
       <div class="card">
-        <div class="af af-signup" style="display:none;">
-          <label class="auth-label">Staff Number</label>
-          <input class="auth-input" id="authStaff" inputmode="numeric" autocomplete="off" placeholder="e.g. 123456">
-        </div>
-        <label class="auth-label">Email</label>
-        <input class="auth-input" id="authEmail" type="email" autocomplete="email" placeholder="you@example.com">
+        <label class="auth-label">Staff Number</label>
+        <input class="auth-input" id="authStaff" inputmode="numeric" autocomplete="username" placeholder="e.g. 467988">
         <div class="af af-signin af-signup">
           <label class="auth-label">Password</label>
           <input class="auth-input" id="authPass" type="password" autocomplete="current-password" placeholder="At least 6 characters" onkeydown="if(event.key==='Enter'&&AUTH_MODE==='signin'){doSignIn();}">
@@ -1429,11 +1425,13 @@ function authSubmit(){
   else doSignIn();
 }
 function gv(id){ return document.getElementById(id).value; }
+function staffEmail(staff){ return staff.toLowerCase() + '@b777crew.app'; }
+function staffOk(s){ return /^[a-zA-Z0-9]{3,12}$/.test(s); }
 async function doSignUp(){
-  var staff = gv('authStaff').trim(), email = gv('authEmail').trim().toLowerCase(), pass = gv('authPass');
+  var staff = gv('authStaff').trim(), pass = gv('authPass');
+  var email = staffEmail(staff);
   var a1 = gv('authA1').trim(), a2 = gv('authA2').trim();
-  if(!staff){ authMsg(1,'Please enter your staff number.'); return; }
-  if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)){ authMsg(1,'Please enter a valid email address.'); return; }
+  if(!staffOk(staff)){ authMsg(1,'Enter a valid staff number (3\u201312 letters/digits).'); return; }
   if(pass.length < 6){ authMsg(1,'Password must be at least 6 characters.'); return; }
   if(!a1 || !a2){ authMsg(1,'Answer both security questions \u2014 they are how you recover a lost password.'); return; }
   if(!navigator.onLine){ authMsg(1,'You are offline.'); return; }
@@ -1442,7 +1440,7 @@ async function doSignUp(){
   var r = await sb.auth.signUp({ email: email, password: pass, options: { data: { staff_id: staff } } });
   btn.disabled = false; btn.textContent = 'Create Account';
   if(r.error){
-    authMsg(1, /already|registered/i.test(r.error.message) ? 'This email is already registered \u2014 go back and Sign In.' : r.error.message);
+    authMsg(1, /already|registered/i.test(r.error.message) ? 'This staff number is already registered \u2014 go back and Sign In.' : r.error.message);
     return;
   }
   try{ localStorage.setItem('b777_staff', staff); }catch(e){}
@@ -1456,8 +1454,9 @@ async function doSignUp(){
   enterApp();
 }
 async function doSignIn(){
-  var email = gv('authEmail').trim().toLowerCase(), pass = gv('authPass');
-  if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)){ authMsg(1,'Please enter a valid email address.'); return; }
+  var staff = gv('authStaff').trim(), pass = gv('authPass');
+  var email = staffEmail(staff);
+  if(!staffOk(staff)){ authMsg(1,'Enter your staff number.'); return; }
   if(pass.length < 6){ authMsg(1,'Password must be at least 6 characters.'); return; }
   if(!navigator.onLine){ authMsg(1,'You are offline.'); return; }
   var btn = document.getElementById('authMainBtn');
@@ -1465,17 +1464,17 @@ async function doSignIn(){
   var r = await sb.auth.signInWithPassword({ email: email, password: pass });
   btn.disabled = false; btn.textContent = 'Sign In';
   if(r.error){
-    authMsg(1, /invalid/i.test(r.error.message) ? 'Wrong email or password \u2014 or create an account if you are new.' : r.error.message);
+    authMsg(1, /invalid/i.test(r.error.message) ? 'Wrong staff number or password \u2014 or create an account if you are new.' : r.error.message);
     return;
   }
-  var meta = (r.data.user && r.data.user.user_metadata) || {};
-  if(meta.staff_id){ try{ localStorage.setItem('b777_staff', meta.staff_id); }catch(e){} }
+  try{ localStorage.setItem('b777_staff', staff); }catch(e){}
   enterApp();
 }
 async function doReset(){
-  var email = gv('authEmail').trim().toLowerCase();
+  var staff = gv('authStaff').trim();
+  var email = staffEmail(staff);
   var a1 = gv('authA1').trim(), a2 = gv('authA2').trim(), np = gv('authNewPass');
-  if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)){ authMsg(1,'Enter the email you registered with.'); return; }
+  if(!staffOk(staff)){ authMsg(1,'Enter your staff number.'); return; }
   if(!a1 || !a2){ authMsg(1,'Answer both security questions.'); return; }
   if(np.length < 6){ authMsg(1,'New password must be at least 6 characters.'); return; }
   var btn = document.getElementById('authMainBtn');
@@ -1706,7 +1705,7 @@ async function renderAdmin(){
   document.getElementById('adMsgs').textContent = (mToday.count||0) + ' / ' + (mAll.count||0);
   document.getElementById('adUserList').innerHTML = profs.data.length ? profs.data.map(function(p){
     var a = byUser[p.user_id] || { sec:0, views:0 };
-    return '<div class="ad-row"><div><div class="au">'+esc(p.staff_id||'?')+'</div><div style="color:var(--sub);font-size:12px;">'+esc(p.email)+'</div></div>'
+    return '<div class="ad-row"><div><div class="au">'+esc(p.staff_id||'?')+'</div><div style="color:var(--sub);font-size:12px;">joined '+fmtTime(p.created_at)+'</div></div>'
       + '<div class="am">'+fmtDur(a.sec)+' · '+a.views+' views<br>last: '+fmtTime(p.last_seen)+'</div></div>';
   }).join('') : '<div class="empty-note">No users yet.</div>';
 }
