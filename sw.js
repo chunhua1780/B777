@@ -1,4 +1,4 @@
-const CACHE = 'b777-v14';
+const CACHE = 'b777-v15';
 const ASSETS = ['./', './index.html', './questions.js', './supabase.js', './manifest.json', './icon192.png', './icon512.png'];
 
 self.addEventListener('install', function(e){
@@ -17,6 +17,19 @@ self.addEventListener('activate', function(e){
 
 self.addEventListener('fetch', function(e){
   if(e.request.method !== 'GET') return;
+  var isNav = e.request.mode === 'navigate' || e.request.url.indexOf('index.html') > -1;
+  if(isNav){
+    // Network-first for the page itself: updates show up on the very next load
+    e.respondWith(
+      fetch(e.request).then(function(resp){
+        var copy = resp.clone();
+        caches.open(CACHE).then(function(c){ c.put('./index.html', copy); });
+        return resp;
+      }).catch(function(){ return caches.match('./index.html'); })
+    );
+    return;
+  }
+  // Everything else: cache-first (fast + offline)
   e.respondWith(
     caches.match(e.request, {ignoreSearch:true}).then(function(cached){
       if(cached) return cached;
@@ -25,10 +38,7 @@ self.addEventListener('fetch', function(e){
           c.put(e.request, resp.clone());
           return resp;
         });
-      }).catch(function(){
-        // Offline navigation (e.g. opening the app root) → app shell
-        if(e.request.mode === 'navigate') return caches.match('./index.html');
-      });
+      }).catch(function(){});
     })
   );
 });
