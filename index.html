@@ -223,6 +223,31 @@
   .auth-msg.ok{display:block;background:var(--good-bg);color:var(--good);}
   .code-input{text-align:center;letter-spacing:8px;font-size:22px;font-weight:700;font-variant-numeric:tabular-nums;}
 
+  /* Community: Pilot Lounge + Sim Notes */
+  .mode-btn.lounge .ic{background:var(--good-bg);}
+  .mode-btn.simnotes .ic{background:rgba(90,200,250,.16);}
+  .chat-box{display:flex;flex-direction:column;gap:10px;padding:6px 0 12px;}
+  .chat-msg{max-width:85%;align-self:flex-start;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:9px 13px;}
+  .chat-msg.mine{align-self:flex-end;background:var(--chip-bg);border-color:transparent;}
+  .chat-meta{font-size:11px;color:var(--sub);margin-bottom:3px;}
+  .chat-text{font-size:14.5px;line-height:1.45;white-space:pre-wrap;word-break:break-word;}
+  .chat-input-row{position:sticky;bottom:0;display:flex;gap:8px;padding:10px 0 calc(10px + env(safe-area-inset-bottom));background:var(--bg);}
+  .chat-input-row .auth-input{flex:1;margin-bottom:0;}
+  .chat-send{background:var(--accent);color:#fff;border:none;border-radius:14px;padding:0 18px;font-weight:700;font-size:14px;cursor:pointer;}
+  .nick-row{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--sub);margin-bottom:10px;flex-wrap:wrap;}
+  .nick-row .auth-input{width:140px;padding:7px 10px;font-size:13px;margin-bottom:0;border-radius:10px;}
+  .post-item{display:block;width:100%;text-align:left;background:var(--card);border:1px solid var(--border);border-radius:16px;padding:14px 16px;margin-bottom:10px;cursor:pointer;color:var(--text);}
+  .post-item .pt{font-size:15px;font-weight:700;}
+  .post-item .pm{font-size:12px;color:var(--sub);margin-top:3px;}
+  .post-item .pp{font-size:13px;color:var(--sub);margin-top:6px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
+  .post-body{font-size:14.5px;line-height:1.6;white-space:pre-wrap;word-break:break-word;margin-top:8px;}
+  .post-img{max-width:100%;border-radius:12px;margin-top:10px;border:1px solid var(--border);display:block;}
+  .comment{border-top:1px solid var(--border);padding:10px 0;}
+  .comment .cm{font-size:11.5px;color:var(--sub);margin-bottom:2px;}
+  .comment .ct{font-size:13.5px;line-height:1.5;white-space:pre-wrap;word-break:break-word;}
+  .empty-note{text-align:center;color:var(--sub);font-size:13.5px;padding:26px 0;}
+  textarea.auth-input{resize:vertical;min-height:90px;font-family:inherit;line-height:1.5;}
+
   /* Apple-style press feedback: a small spring-like squish instead of a flat opacity flip */
   .mode-btn, .big-btn, .opt-pill, .due-card button, .tog{ transition:transform .12s cubic-bezier(.34,1.56,.64,1), opacity .12s, background .15s, border-color .15s; }
   .mode-btn:active, .big-btn:active, .opt-pill:active, .due-card button:active{ transform:scale(.97); opacity:1; }
@@ -401,11 +426,82 @@
         <div><div class="t">Mistake Bank</div><div class="d" id="wrongBankDesc">Drill the questions you keep getting wrong</div></div>
         <div class="arrow">›</div>
       </button>
+      <button class="mode-btn lounge" onclick="openLounge()">
+        <div class="ic">💬</div>
+        <div><div class="t">Pilot Lounge</div><div class="d">Anonymous open chat with fellow pilots</div></div>
+        <div class="arrow">›</div>
+      </button>
+      <button class="mode-btn simnotes" onclick="openSimNotes()">
+        <div class="ic">🛫</div>
+        <div><div class="t">Sim Notes</div><div class="d">Debriefs & heads-ups shared after sim sessions</div></div>
+        <div class="arrow">›</div>
+      </button>
     </div>
 
     <div class="install-hint" id="installHint">💡 Add this page to your Home Screen / Desktop — the whole app and question bank then work fully offline.</div>
     <a class="footer-link" href="#" onclick="openReportIssue(null);return false;">🚩 Report an error in the question bank</a>
     <a class="footer-link" href="#" onclick="signOut();return false;">👤 <span id="whoami">Signed in</span> &middot; Sign out</a>
+  </div>
+
+  <!-- PILOT LOUNGE -->
+  <div class="screen" id="lounge">
+    <button class="back-link" onclick="show('home')">‹ Back</button>
+    <div class="card">
+      <h2>Pilot Lounge 💬</h2>
+      <p class="desc">Open chat for B777 pilots. Stay anonymous or pick a nickname. Keep it friendly — no real names, no confidential company material.</p>
+      <div class="nick-row">Posting as <input class="auth-input" id="nickInput" maxlength="20" placeholder="Anonymous" onchange="saveNick(1)"> <span>(blank = anonymous)</span></div>
+    </div>
+    <div class="chat-box" id="chatBox"><div class="empty-note">Loading…</div></div>
+    <div class="chat-input-row">
+      <input class="auth-input" id="chatText" maxlength="500" placeholder="Say something…" onkeydown="if(event.key==='Enter'){sendChat();}">
+      <button class="chat-send" onclick="sendChat()">Send</button>
+    </div>
+  </div>
+
+  <!-- SIM NOTES LIST -->
+  <div class="screen" id="simnotes">
+    <button class="back-link" onclick="show('home')">‹ Back</button>
+    <div class="card">
+      <h2>Sim Notes 🛫</h2>
+      <p class="desc">Just flew the sim? Share your debrief so the next crew knows what came up and what to watch out for.</p>
+      <div class="nick-row">Posting as <input class="auth-input" id="nickInput2" maxlength="20" placeholder="Anonymous" onchange="saveNick(2)"></div>
+      <button class="big-btn" onclick="openNewPost()">＋ Share your sim notes</button>
+    </div>
+    <div id="postList"><div class="empty-note">Loading…</div></div>
+  </div>
+
+  <!-- NEW POST -->
+  <div class="screen" id="newpost">
+    <button class="back-link" onclick="show('simnotes');loadPosts()">‹ Back</button>
+    <div class="card">
+      <h2>Share sim notes</h2>
+      <label class="auth-label">Title</label>
+      <input class="auth-input" id="postTitle" maxlength="120" placeholder="e.g. OPC/LPC — engine fire + windshear at rotation">
+      <label class="auth-label">Your notes</label>
+      <textarea class="auth-input" id="postBody" maxlength="8000" placeholder="Scenarios that came up, gotchas, examiner focus areas, things to brush up on…"></textarea>
+      <label class="auth-label">Photos (optional, up to 3)</label>
+      <input class="auth-input" type="file" id="postImgs" accept="image/*" multiple>
+      <div class="auth-msg" id="postMsg"></div>
+      <button class="big-btn" id="postSubmitBtn" onclick="submitPost()">Post</button>
+    </div>
+  </div>
+
+  <!-- POST VIEW -->
+  <div class="screen" id="postview">
+    <button class="back-link" onclick="show('simnotes');loadPosts()">‹ Back</button>
+    <div class="card">
+      <h2 id="pvTitle"></h2>
+      <p class="desc" id="pvMeta" style="margin-bottom:0;"></p>
+      <div class="post-body" id="pvBody"></div>
+      <div id="pvImgs"></div>
+    </div>
+    <div class="card">
+      <h2 style="font-size:16px;">Comments &amp; heads-ups</h2>
+      <div id="pvComments"><div class="empty-note">Loading…</div></div>
+      <textarea class="auth-input" id="cmtText" maxlength="1000" style="min-height:70px;" placeholder="Add a note for others — what to watch out for…"></textarea>
+      <div class="auth-msg" id="cmtMsg"></div>
+      <button class="big-btn" onclick="submitComment()">Comment</button>
+    </div>
   </div>
 
   <!-- SETUP (practice) -->
@@ -1325,6 +1421,135 @@ async function initAuth(){
     if(s.data && s.data.session){ enterApp(); return; }
   }catch(e){ enterApp(); return; }
   show('auth');
+}
+
+// ═══ Community: Pilot Lounge chat + Sim Notes ═══
+var NICK_KEY = 'b777_nick';
+function getNick(){ try{ return (localStorage.getItem(NICK_KEY)||'').trim(); }catch(e){ return ''; } }
+function saveNick(n){
+  var v = document.getElementById(n===2?'nickInput2':'nickInput').value.trim().slice(0,20);
+  try{ localStorage.setItem(NICK_KEY, v); }catch(e){}
+  var a=document.getElementById('nickInput'), b=document.getElementById('nickInput2');
+  if(a) a.value=v; if(b) b.value=v;
+}
+function dispName(x){ return x && x.trim() ? x.trim() : 'Anonymous'; }
+function fmtTime(iso){
+  var d=new Date(iso), now=new Date();
+  var t=d.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
+  return d.toDateString()===now.toDateString() ? t : d.toLocaleDateString([], {month:'short',day:'numeric'})+' '+t;
+}
+function esc(s){ var d=document.createElement('div'); d.textContent=(s==null?'':s); return d.innerHTML; }
+async function myId(){ try{ var s=await sb.auth.getSession(); return s.data.session ? s.data.session.user.id : null; }catch(e){ return null; } }
+
+// ── Pilot Lounge ──
+var chatChannel = null;
+function openLounge(){
+  document.getElementById('nickInput').value = getNick();
+  show('lounge'); loadChat(); subscribeChat();
+}
+async function loadChat(){
+  var box = document.getElementById('chatBox');
+  if(!navigator.onLine){ box.innerHTML='<div class="empty-note">You are offline — the lounge needs a connection.</div>'; return; }
+  var r = await sb.from('b777_chat').select('*').order('created_at',{ascending:false}).limit(100);
+  if(r.error){ box.innerHTML='<div class="empty-note">Could not load chat ('+esc(r.error.message)+')</div>'; return; }
+  var me = await myId();
+  var rows = r.data.reverse();
+  box.innerHTML = rows.length ? rows.map(function(m){
+    return '<div class="chat-msg'+(m.user_id===me?' mine':'')+'"><div class="chat-meta">'+esc(dispName(m.nickname))+' · '+fmtTime(m.created_at)+'</div><div class="chat-text">'+esc(m.text)+'</div></div>';
+  }).join('') : '<div class="empty-note">No messages yet — say hi! 👋</div>';
+  window.scrollTo(0, document.body.scrollHeight);
+}
+function subscribeChat(){
+  if(chatChannel || !sb) return;
+  try{
+    chatChannel = sb.channel('b777-lounge')
+      .on('postgres_changes', {event:'INSERT', schema:'public', table:'b777_chat'}, function(){
+        if(document.getElementById('lounge').classList.contains('active')) loadChat();
+      })
+      .subscribe();
+  }catch(e){}
+}
+async function sendChat(){
+  var inp = document.getElementById('chatText');
+  var t = inp.value.trim(); if(!t) return;
+  inp.value = '';
+  var r = await sb.from('b777_chat').insert({ text: t.slice(0,500), nickname: getNick() });
+  if(r.error){ alert('Send failed: '+r.error.message); inp.value = t; return; }
+  loadChat();
+}
+
+// ── Sim Notes ──
+function openSimNotes(){
+  document.getElementById('nickInput2').value = getNick();
+  show('simnotes'); loadPosts();
+}
+async function loadPosts(){
+  var el = document.getElementById('postList');
+  if(!navigator.onLine){ el.innerHTML='<div class="empty-note">You are offline.</div>'; return; }
+  var r = await sb.from('b777_sim_posts').select('*').order('created_at',{ascending:false}).limit(50);
+  if(r.error){ el.innerHTML='<div class="empty-note">Could not load ('+esc(r.error.message)+')</div>'; return; }
+  el.innerHTML = r.data.length ? r.data.map(function(p){
+    return '<button class="post-item" onclick="openPost(\''+p.id+'\')"><div class="pt">'+esc(p.title)+'</div><div class="pm">'+esc(dispName(p.nickname))+' · '+fmtTime(p.created_at)+'</div><div class="pp">'+esc(p.body||'')+'</div></button>';
+  }).join('') : '<div class="empty-note">No sim notes yet — be the first to share after your next sim! 🛫</div>';
+}
+function postMsgSet(t, ok){ var el=document.getElementById('postMsg'); el.className='auth-msg '+(t?(ok?'ok':'err'):''); el.textContent=t||''; }
+function openNewPost(){
+  document.getElementById('postTitle').value='';
+  document.getElementById('postBody').value='';
+  document.getElementById('postImgs').value='';
+  postMsgSet('');
+  show('newpost');
+}
+async function submitPost(){
+  var title = document.getElementById('postTitle').value.trim();
+  var body = document.getElementById('postBody').value.trim();
+  if(!title){ postMsgSet('Add a short title.'); return; }
+  if(!body){ postMsgSet('Write your notes first.'); return; }
+  var btn = document.getElementById('postSubmitBtn'); btn.disabled=true; btn.textContent='Posting…';
+  var imgs = []; var files = document.getElementById('postImgs').files;
+  for(var i=0;i<Math.min(files.length,3);i++){
+    var f = files[i];
+    var path = Date.now()+'-'+i+'-'+f.name.replace(/[^a-zA-Z0-9_.-]/g,'_');
+    var up = await sb.storage.from('simnotes').upload(path, f);
+    if(up.error){ btn.disabled=false; btn.textContent='Post'; postMsgSet('Photo upload failed: '+up.error.message); return; }
+    imgs.push(sb.storage.from('simnotes').getPublicUrl(path).data.publicUrl);
+  }
+  var r = await sb.from('b777_sim_posts').insert({ title:title.slice(0,120), body:body.slice(0,8000), nickname:getNick(), images:imgs });
+  btn.disabled=false; btn.textContent='Post';
+  if(r.error){ postMsgSet('Post failed: '+r.error.message); return; }
+  show('simnotes'); loadPosts();
+}
+var CUR_POST = null;
+async function openPost(id){
+  show('postview'); CUR_POST = id;
+  document.getElementById('pvTitle').textContent = '…';
+  document.getElementById('pvBody').textContent = '';
+  document.getElementById('pvImgs').innerHTML = '';
+  document.getElementById('pvComments').innerHTML = '<div class="empty-note">Loading…</div>';
+  var r = await sb.from('b777_sim_posts').select('*').eq('id', id).single();
+  if(r.error){ document.getElementById('pvTitle').textContent = 'Post not found'; return; }
+  var p = r.data;
+  document.getElementById('pvTitle').textContent = p.title;
+  document.getElementById('pvMeta').textContent = dispName(p.nickname)+' · '+fmtTime(p.created_at);
+  document.getElementById('pvBody').textContent = p.body || '';
+  document.getElementById('pvImgs').innerHTML = (p.images||[]).map(function(u){ return '<img class="post-img" src="'+esc(u)+'" loading="lazy">'; }).join('');
+  loadComments();
+}
+async function loadComments(){
+  var el = document.getElementById('pvComments');
+  var r = await sb.from('b777_sim_comments').select('*').eq('post_id', CUR_POST).order('created_at',{ascending:true}).limit(200);
+  if(r.error){ el.innerHTML='<div class="empty-note">Could not load comments.</div>'; return; }
+  el.innerHTML = r.data.length ? r.data.map(function(c){
+    return '<div class="comment"><div class="cm">'+esc(dispName(c.nickname))+' · '+fmtTime(c.created_at)+'</div><div class="ct">'+esc(c.text)+'</div></div>';
+  }).join('') : '<div class="empty-note">No comments yet.</div>';
+}
+async function submitComment(){
+  var inp = document.getElementById('cmtText');
+  var t = inp.value.trim(); if(!t) return;
+  var r = await sb.from('b777_sim_comments').insert({ post_id: CUR_POST, text: t.slice(0,1000), nickname: getNick() });
+  var msg = document.getElementById('cmtMsg');
+  if(r.error){ msg.className='auth-msg err'; msg.textContent='Failed: '+r.error.message; return; }
+  msg.className='auth-msg'; inp.value=''; loadComments();
 }
 
 setupServiceWorker();
