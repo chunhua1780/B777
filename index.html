@@ -1529,18 +1529,19 @@ async function doReset(){
 }
 // ── activity heartbeat + profile touch ──
 var hbTimer = null;
+async function beat(){
+  try{
+    if(document.visibilityState!=='visible' || !navigator.onLine || !sb) return;
+    var s = await sb.auth.getSession();
+    if(!(s.data && s.data.session)) return;
+    await sb.rpc('b777_heartbeat');
+    await sb.from('b777_devices').upsert({ user_id: s.data.session.user.id, device_id: deviceId(), last_seen: new Date().toISOString() });
+  }catch(e){}
+}
 function startHeartbeat(){
   if(hbTimer) return;
-  hbTimer = setInterval(function(){
-    if(document.visibilityState==='visible' && navigator.onLine && sb){
-      try{ sb.rpc('b777_heartbeat'); }catch(e){}
-      sb.auth.getSession().then(function(s){
-        if(s.data && s.data.session){
-          sb.from('b777_devices').upsert({ user_id: s.data.session.user.id, device_id: deviceId(), last_seen: new Date().toISOString() });
-        }
-      });
-    }
-  }, 60000);
+  beat();
+  hbTimer = setInterval(beat, 60000);
 }
 async function touchProfile(){
   try{
@@ -1779,7 +1780,7 @@ async function submitPost(){
 var CUR_POST = null;
 async function openPost(id){
   show('postview'); CUR_POST = id;
-  try{ sb.rpc('b777_post_view'); }catch(e){}
+  try{ sb.rpc('b777_post_view').then(function(){},function(){}); }catch(e){}
   document.getElementById('pvTitle').textContent = '…';
   document.getElementById('pvBody').textContent = '';
   document.getElementById('pvImgs').innerHTML = '';
