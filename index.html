@@ -624,31 +624,65 @@
     </div>
 
     <div class="calc-section">
-      <div class="title">Altitude Calculations</div>
+      <div class="title">Altitude & Pressure Corrections</div>
       <div class="calc-row">
         <div class="calc-input">
-          <label>Altimeter Setting (QNH, inHg)</label>
-          <input type="number" id="qnh" placeholder="29.92" step="0.01" oninput="calcAltitude()">
+          <label>Altimeter Setting (QNH)</label>
+          <input type="number" id="qnh" placeholder="29.92" step="0.01" oninput="updateQnhUnits()">
         </div>
         <div class="calc-input">
-          <label>Current Altitude Indication (feet)</label>
-          <input type="number" id="indicatedAlt" placeholder="0" oninput="calcAltitude()">
+          <label>Unit</label>
+          <select id="qnhUnit" onchange="updateQnhUnits()" style="padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--card);color:var(--text);">
+            <option value="inhg">inHg</option>
+            <option value="hpa">hPa</option>
+            <option value="mmhg">mmHg</option>
+          </select>
         </div>
       </div>
       <div class="calc-row">
         <div class="calc-input">
-          <label>Temperature (C)</label>
-          <input type="number" id="tempC" placeholder="0" oninput="calcAltitude()">
+          <label>Indicated Altitude (feet)</label>
+          <input type="number" id="indicatedAlt" placeholder="0" oninput="calcAltitude()">
         </div>
         <div class="calc-input">
-          <label>Station Elevation (feet)</label>
-          <input type="number" id="stationElev" placeholder="0" oninput="calcAltitude()">
+          <label>Temperature (°C)</label>
+          <input type="number" id="tempC" placeholder="0" oninput="calcAltitude()">
         </div>
       </div>
       <div class="calc-result">
-        <div><span class="label">Pressure Altitude:</span> <span class="value" id="pressureAltResult">—</span></div>
-        <div><span class="label">Density Altitude:</span> <span class="value" id="densityAltResult">—</span></div>
+        <div><span class="label">QNH (inHg/hPa/mmHg):</span> <span class="value" id="qnhDisplay">─</span></div>
+        <div><span class="label">Pressure Altitude:</span> <span class="value" id="pressureAltResult">─</span></div>
+        <div><span class="label">Density Altitude:</span> <span class="value" id="densityAltResult">─</span></div>
       </div>
+    </div>
+
+    <div class="calc-section">
+      <div class="title">Descent Rate (Temperature & Pressure Corrected)</div>
+      <div class="calc-row">
+        <div class="calc-input">
+          <label>Ground Speed (knots)</label>
+          <input type="number" id="descentGS2" placeholder="0" oninput="calcDescentDirect()">
+        </div>
+        <div class="calc-input">
+          <label>Desired Glide Slope (°, e.g. -3)</label>
+          <input type="number" id="glideSlope2" placeholder="-3" step="0.1" oninput="calcDescentDirect()">
+        </div>
+      </div>
+      <div class="calc-row">
+        <div class="calc-input">
+          <label>Ambient Temperature (°C)</label>
+          <input type="number" id="tempDescent" placeholder="0" oninput="calcDescentDirect()">
+        </div>
+        <div class="calc-input">
+          <label>Current Altitude (feet)</label>
+          <input type="number" id="altDescent" placeholder="0" oninput="calcDescentDirect()">
+        </div>
+      </div>
+      <div class="calc-result">
+        <div><span class="label">Required Descent Rate (fpm):</span> <span class="value" id="descentRateCalc">─</span></div>
+        <div><span class="label">Temperature Correction Factor:</span> <span class="value" id="tempCorrFactor">─</span></div>
+      </div>
+    </div>
     </div>
 
     <div class="calc-section">
