@@ -2209,6 +2209,141 @@ async function renderAdmin(){
 
 setupServiceWorker();
 initAuth();
+
+
+// ===== FLIGHT CALCULATOR - REAL-TIME AUTO-CALCULATION =====
+function calcAll(){
+  try {
+    // ===== INPUT READING =====
+    var qnhRaw = (document.getElementById('qnh').value || '').trim();
+    var indAlt = parseFloat(document.getElementById('indAlt').value) || 0;
+    var oat = parseFloat(document.getElementById('oat').value) || 0;
+    var ias = parseFloat(document.getElementById('ias').value) || 0;
+    var finalTrack = parseFloat(document.getElementById('finalTrack').value) || 0;
+    var windDir = parseFloat(document.getElementById('windDir').value) || 0;
+    var windSpeed = parseFloat(document.getElementById('windSpeed').value) || 0;
+    var rwyTemp = parseFloat(document.getElementById('rwyTemp').value) || 15;
+    var stdAngle = parseFloat(document.getElementById('stdAngle').value) || 3.0;
+    var distRwy = parseFloat(document.getElementById('distRwy').value) || 0;
+    var rnpLevel = parseFloat(document.getElementById('rnpLevel').value) || 1;
+    
+    // Auto-detect QNH unit
+    var qnh = 29.92;
+    var qnhHpa = 1013.25;
+    if(qnhRaw){
+      var qnhVal = parseFloat(qnhRaw);
+      if(!isNaN(qnhVal)){
+        if(qnhVal > 100){
+          qnhHpa = qnhVal;
+          qnh = qnhVal / 33.8639;
+        } else {
+          qnh = qnhVal;
+          qnhHpa = qnhVal * 33.8639;
+        }
+      }
+    }
+    
+    // ===== STEP 1: PA & DA =====
+    var pa = (29.92 - qnh) * 1000 + indAlt;
+    var isaTemp = 15 - (pa / 1000) * 2;
+    var da = pa + (oat - isaTemp) * 120;
+    
+    setResult('rQnh', qnh.toFixed(2) + ' inHg / ' + qnhHpa.toFixed(1) + ' hPa');
+    setResult('rPA', Math.round(pa) + ' ft');
+    setResult('rDA', Math.round(da) + ' ft');
+    
+    // ===== STEP 2: TAS (用密度比) =====
+    var tas = 0;
+    var sigma = 0;
+    if(ias > 0){
+      var paMeter = pa * 0.3048;
+      var isaTemp2 = 15 - 0.0065 * paMeter;
+      var presRatio = Math.pow(1 - 6.8755856e-6 * pa, 5.2558797);
+      var tempRatio = (oat + 273.15) / (isaTemp2 + 273.15);
+      sigma = Math.pow(tempRatio, 4.256) * Math.pow(presRatio, 5.256);
+      sigma = Math.max(0.01, sigma);
+      tas = ias / Math.sqrt(sigma);
+      
+      setResult('rTAS', Math.round(tas) + ' kts');
+      setResult('rSigma', sigma.toFixed(4));
+    } else {
+      setResult('rTAS', '─');
+      setResult('rSigma', '─');
+    }
+    
+    // ===== STEP 3: WIND & NAVIGATION =====
+    var wca = 0, gs = 0, heading = 0, windAngle = 0, windCompStr = '─';
+    if(tas > 0 && windSpeed > 0){
+      windAngle = windDir - finalTrack;
+      while(windAngle > 180) windAngle -= 360;
+      while(windAngle < -180) windAngle += 360;
+      var windAngleAbs = Math.abs(windAngle);
+      var windAngleRad = windAngle * Math.PI / 180;
+      
+      var wcaArg = (windSpeed * Math.sin(windAngleRad)) / tas;
+      wcaArg = Math.max(-1, Math.min(1, wcaArg));
+      wca = Math.asin(wcaArg) * 180 / Math.PI;
+      
+      heading = finalTrack + wca;
+      while(heading < 0) heading += 360;
+      while(heading >= 360) heading -= 360;
+      
+      gs = Math.sqrt(Math.pow(tas, 2) + Math.pow(windSpeed, 2) - 2 * tas * windSpeed * Math.cos(windAngleRad));
+      
+      var hwComponent = windSpeed * Math.cos(windAngleRad);
+      windCompStr = hwComponent > 0 ? Math.abs(hwComponent).toFixed(1) + ' kts headwind' 
+                  : Math.abs(hwComponent).toFixed(1) + ' kts tailwind';
+      
+      setResult('rWindAngle', windAngleAbs.toFixed(1) + '°');
+      setResult('rWCA', wca.toFixed(1) + '°');
+      setResult('rHeading', Math.round(heading) + '°');
+      setResult('rGS', Math.round(gs) + ' kts');
+      setResult('rWindComp', windCompStr);
+    } else {
+      setResult('rWindAngle', '─');
+      setResult('rWCA', '─');
+      setResult('rHeading', finalTrack > 0 ? Math.round(finalTrack) + '°' : '─');
+      setResult('rGS', tas > 0 ? Math.round(tas) + ' kts' : '─');
+      setResult('rWindComp', '─');
+    }
+    
+    // ===== STEP 4: RNP APPROACH =====
+    var tempDev = oat - rwyTemp;
+    var corrAngle = stdAngle + (tempDev * 0.02);
+    var rod = 0;
+    var appTime = 0;
+    
+    if(gs > 0){
+      var angleRad = corrAngle * -1 * Math.PI / 180;
+      rod = gs * 101.3 * Math.tan(angleRad);
+      appTime = distRwy > 0 ? (distRwy / gs) * 60 : 0;
+    }
+    
+    var tolerances = {'0.1': 0.1, '0.3': 0.3, '0.5': 0.5, '1': 1, '2': 2, '4': 4};
+    var tolerance = tolerances[rnpLevel.toString()] || 1;
+    
+    setResult('rTempDev', tempDev.toFixed(1) + '°C');
+    setResult('rCorrAngle', corrAngle.toFixed(2) + '° (from ' + stdAngle.toFixed(2) + '°)');
+    setResult('rROD', Math.abs(rod).toFixed(0) + ' fpm');
+    setResult('rAppTime', appTime > 0 ? appTime.toFixed(1) + ' min' : '─');
+    setResult('rRNPTol', '±' + tolerance.toFixed(2));
+    
+  } catch(e){
+    console.error('calcAll error:', e);
+  }
+}
+
+// Helper: safe result display
+function setResult(id, val){
+  var el = document.getElementById(id);
+  if(el) el.textContent = val;
+}
+
+// Trigger calc on page load
+window.addEventListener('load', function(){
+  calcAll();
+});
+
 </script>
 </body>
 </html>
