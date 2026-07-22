@@ -719,6 +719,64 @@
         <div><span class="label">Distance to Begin Descent (NM):</span> <span class="value" id="tbd">—</span></div>
       </div>
     </div>
+    <div class="calc-section">
+      <div class="title">RNP Approach (Temperature & Performance Corrected)</div>
+      <div class="calc-row">
+        <div class="calc-input">
+          <label>RNP Level</label>
+          <select id="rnpLevel" onchange="calcRNP()" style="padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--card);color:var(--text);">
+            <option value="0.1">RNP 0.1 (Precision)</option>
+            <option value="0.3">RNP 0.3</option>
+            <option value="0.5">RNP 0.5</option>
+            <option value="1">RNP 1 (Standard)</option>
+            <option value="2">RNP 2</option>
+            <option value="4">RNP 4</option>
+          </select>
+        </div>
+        <div class="calc-input">
+          <label>Approach Angle (°, typical 3)</label>
+          <input type="number" id="approachAngle" placeholder="3" step="0.1" oninput="calcRNP()">
+        </div>
+      </div>
+      <div class="calc-row">
+        <div class="calc-input">
+          <label>Distance to Runway (NM)</label>
+          <input type="number" id="approachDist" placeholder="0" oninput="calcRNP()">
+        </div>
+        <div class="calc-input">
+          <label>Current Altitude (feet)</label>
+          <input type="number" id="approachAlt" placeholder="0" oninput="calcRNP()">
+        </div>
+      </div>
+      <div class="calc-row">
+        <div class="calc-input">
+          <label>Runway Elevation (feet)</label>
+          <input type="number" id="runwayElev" placeholder="0" oninput="calcRNP()">
+        </div>
+        <div class="calc-input">
+          <label>Ground Speed (knots)</label>
+          <input type="number" id="approachGS" placeholder="0" oninput="calcRNP()">
+        </div>
+      </div>
+      <div class="calc-row">
+        <div class="calc-input">
+          <label>Ambient Temperature (°C)</label>
+          <input type="number" id="approachTemp" placeholder="0" oninput="calcRNP()">
+        </div>
+        <div class="calc-input">
+          <label>Runway Threshold Temperature (°C, std=15)</label>
+          <input type="number" id="runwayThresholdTemp" placeholder="15" oninput="calcRNP()">
+        </div>
+      </div>
+      <div class="calc-result">
+        <div><span class="label">RNP Lateral Tolerance (±):</span> <span class="value" id="rnpTolerance">─</span></div>
+        <div><span class="label">Standard Approach Angle:</span> <span class="value" id="stdApproachAngle">─</span></div>
+        <div><span class="label">Temperature-Corrected Approach Angle:</span> <span class="value" id="correctedApproachAngle">─</span></div>
+        <div><span class="label">Required Descent Rate (fpm):</span> <span class="value" id="approachDescentRate">─</span></div>
+        <div><span class="label">Time to Touchdown (min):</span> <span class="value" id="approachTime">─</span></div>
+      </div>
+    </div>
+
 
     <div class="calc-section">
       <div class="title">Time / Distance / Speed</div>
@@ -2075,6 +2133,58 @@ function calcWind(){
   var gs = dir==='1' ? tas + ws : tas - ws;
   gs = Math.max(0, gs);
   document.getElementById('windGSResult').textContent = gs ? gs.toFixed(0)+' kts' : '—';
+}
+
+
+function calcRNP(){
+  var rnpLevel = parseFloat(document.getElementById('rnpLevel').value) || 1;
+  var approachAngle = parseFloat(document.getElementById('approachAngle').value) || 3;
+  var dist = parseFloat(document.getElementById('approachDist').value) || 0;
+  var curAlt = parseFloat(document.getElementById('approachAlt').value) || 0;
+  var rwElev = parseFloat(document.getElementById('runwayElev').value) || 0;
+  var gs = parseFloat(document.getElementById('approachGS').value) || 0;
+  var tempAmbient = parseFloat(document.getElementById('approachTemp').value) || 0;
+  var tempRunway = parseFloat(document.getElementById('runwayThresholdTemp').value) || 15;
+  
+  // RNP 精度等级 -> 横向容差(NM)
+  var rnpTolerances = {
+    '0.1': 0.1, '0.3': 0.3, '0.5': 0.5, '1': 1, '2': 2, '4': 4
+  };
+  var tolerance = rnpTolerances[rnpLevel.toString()] || 1;
+  
+  // 标准进近角(通常 2.5-3.5°)
+  var stdAngle = approachAngle;
+  
+  // 温度修正:气温每高1°C,空气密度降低,飞机性能下降,需要更陡的下降角
+  // 修正系数约 0.1-0.15°/°C 的温差
+  var tempDeviation = tempAmbient - tempRunway;
+  var tempCorrAngle = stdAngle + (tempDeviation * 0.12); // 每°C 增加 0.12° 下降角
+  
+  // 下降高度 (当前 - 跑道标高)
+  var altToDrop = curAlt - rwElev;
+  
+  // 下降率计算
+  // 下降率 (fpm) = 地速 × sin(角度) / 101.3
+  var angleRad = (tempCorrAngle * -1) * Math.PI / 180; // 转为负角
+  var descentRate = gs * Math.sin(angleRad) / 101.3;
+  
+  // 下降时间
+  var approachTime = 0;
+  if(gs && dist){
+    approachTime = (dist / gs) * 60; // 分钟
+  }
+  
+  // 格式化输出
+  var fmt = function(x, decimals){ 
+    if(!x || isNaN(x)) return '─';
+    return x.toFixed(decimals || 1);
+  };
+  
+  document.getElementById('rnpTolerance').textContent = '±' + fmt(tolerance, 2) + ' NM';
+  document.getElementById('stdApproachAngle').textContent = fmt(stdAngle, 2) + '°';
+  document.getElementById('correctedApproachAngle').textContent = fmt(tempCorrAngle, 2) + '° (Δ' + fmt(tempDeviation, 1) + '°C → ' + fmt(tempCorrAngle - stdAngle, 2) + '°)';
+  document.getElementById('approachDescentRate').textContent = fmt(Math.abs(descentRate), 0) + ' fpm';
+  document.getElementById('approachTime').textContent = fmt(approachTime, 1) + ' min';
 }
 
 // ═══ Offline download ═══
