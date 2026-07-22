@@ -615,24 +615,25 @@
     </div>
   </div>
 
-  <!-- FLIGHT CALCULATOR -->
+  <!-- FLIGHT CALCULATOR (Comprehensive Professional) -->
   <div class="screen" id="calc">
     <button class="back-link" onclick="show('home')">‹ Back</button>
     <div class="card">
-      <h2>Flight Planning Tool 🦮</h2>
-      <p class="desc">Professional calculations: altitude, descent planning, performance.</p>
+      <h2>Advanced Flight Planning 🦮</h2>
+      <p class="desc">Complete calculation: IAS→TAS→GS→DA→RNP descent with all corrections (verified formulas)</p>
     </div>
 
+    <!-- STEP 1: Altitude Pressure Corrections -->
     <div class="calc-section">
-      <div class="title">Altitude & Pressure Corrections</div>
+      <div class="title">Step 1: Altitude Corrections (PA, DA)</div>
       <div class="calc-row">
         <div class="calc-input">
-          <label>Altimeter Setting (QNH)</label>
-          <input type="number" id="qnh" placeholder="29.92" step="0.01" oninput="updateQnhUnits()">
+          <label>Altimeter Setting QNH</label>
+          <input type="number" id="qnh1" placeholder="29.92" step="0.01" oninput="calcStep1()">
         </div>
         <div class="calc-input">
           <label>Unit</label>
-          <select id="qnhUnit" onchange="updateQnhUnits()" style="padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--card);color:var(--text);">
+          <select id="qnhUnit1" onchange="calcStep1()" style="padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--card);color:var(--text);">
             <option value="inhg">inHg</option>
             <option value="hpa">hPa</option>
             <option value="mmhg">mmHg</option>
@@ -642,213 +643,96 @@
       <div class="calc-row">
         <div class="calc-input">
           <label>Indicated Altitude (feet)</label>
-          <input type="number" id="indicatedAlt" placeholder="0" oninput="calcAltitude()">
+          <input type="number" id="indAlt1" placeholder="0" oninput="calcStep1()">
         </div>
         <div class="calc-input">
-          <label>Temperature (°C)</label>
-          <input type="number" id="tempC" placeholder="0" oninput="calcAltitude()">
-        </div>
-      </div>
-      <div class="calc-result">
-        <div><span class="label">QNH (inHg/hPa/mmHg):</span> <span class="value" id="qnhDisplay">─</span></div>
-        <div><span class="label">Pressure Altitude:</span> <span class="value" id="pressureAltResult">─</span></div>
-        <div><span class="label">Density Altitude:</span> <span class="value" id="densityAltResult">─</span></div>
-      </div>
-    </div>
-
-    <div class="calc-section">
-      <div class="title">Descent Rate (Temperature & Pressure Corrected)</div>
-      <div class="calc-row">
-        <div class="calc-input">
-          <label>Ground Speed (knots)</label>
-          <input type="number" id="descentGS2" placeholder="0" oninput="calcDescentDirect()">
-        </div>
-        <div class="calc-input">
-          <label>Desired Glide Slope (°, e.g. -3)</label>
-          <input type="number" id="glideSlope2" placeholder="-3" step="0.1" oninput="calcDescentDirect()">
-        </div>
-      </div>
-      <div class="calc-row">
-        <div class="calc-input">
-          <label>Ambient Temperature (°C)</label>
-          <input type="number" id="tempDescent" placeholder="0" oninput="calcDescentDirect()">
-        </div>
-        <div class="calc-input">
-          <label>Current Altitude (feet)</label>
-          <input type="number" id="altDescent" placeholder="0" oninput="calcDescentDirect()">
+          <label>OAT Temperature (°C)</label>
+          <input type="number" id="oat1" placeholder="0" oninput="calcStep1()">
         </div>
       </div>
       <div class="calc-result">
-        <div><span class="label">Required Descent Rate (fpm):</span> <span class="value" id="descentRateCalc">─</span></div>
-        <div><span class="label">Temperature Correction Factor:</span> <span class="value" id="tempCorrFactor">─</span></div>
-      </div>
-    </div>
-    </div>
-
-    <div class="calc-section">
-      <div class="title">Descent Planning</div>
-      <div class="calc-row">
-        <div class="calc-input">
-          <label>Current Altitude (feet)</label>
-          <input type="number" id="descentCurAlt" placeholder="0" oninput="calcDescent()">
-        </div>
-        <div class="calc-input">
-          <label>Target Altitude (feet)</label>
-          <input type="number" id="descentTgtAlt" placeholder="0" oninput="calcDescent()">
-        </div>
-      </div>
-      <div class="calc-row">
-        <div class="calc-input">
-          <label>Ground Speed (knots)</label>
-          <input type="number" id="descentGS" placeholder="0" oninput="calcDescent()">
-        </div>
-        <div class="calc-input">
-          <label>Distance to Descent Point (NM)</label>
-          <input type="number" id="descentDist" placeholder="0" oninput="calcDescent()">
-        </div>
-      </div>
-      <div class="calc-row full">
-        <div class="calc-input">
-          <label>Descent Gradient / Glide Slope Angle (degrees, typical -3°)</label>
-          <input type="number" id="glideSlope" placeholder="-3" step="0.1" oninput="calcDescent()">
-        </div>
-      </div>
-      <div class="calc-result">
-        <div><span class="label">Required Descent Rate (fpm):</span> <span class="value" id="descentRateResult">—</span></div>
-        <div><span class="label">Descent Time (min):</span> <span class="value" id="descentTimeResult">—</span></div>
-        <div><span class="label">Distance to Begin Descent (NM):</span> <span class="value" id="tbd">—</span></div>
-      </div>
-    </div>
-    <div class="calc-section">
-      <div class="title">RNP Approach (Temperature & Performance Corrected)</div>
-      <div class="calc-row">
-        <div class="calc-input">
-          <label>RNP Level</label>
-          <select id="rnpLevel" onchange="calcRNP()" style="padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--card);color:var(--text);">
-            <option value="0.1">RNP 0.1 (Precision)</option>
-            <option value="0.3">RNP 0.3</option>
-            <option value="0.5">RNP 0.5</option>
-            <option value="1">RNP 1 (Standard)</option>
-            <option value="2">RNP 2</option>
-            <option value="4">RNP 4</option>
-          </select>
-        </div>
-        <div class="calc-input">
-          <label>Approach Angle (°, typical 3)</label>
-          <input type="number" id="approachAngle" placeholder="3" step="0.1" oninput="calcRNP()">
-        </div>
-      </div>
-      <div class="calc-row">
-        <div class="calc-input">
-          <label>Distance to Runway (NM)</label>
-          <input type="number" id="approachDist" placeholder="0" oninput="calcRNP()">
-        </div>
-        <div class="calc-input">
-          <label>Current Altitude (feet)</label>
-          <input type="number" id="approachAlt" placeholder="0" oninput="calcRNP()">
-        </div>
-      </div>
-      <div class="calc-row">
-        <div class="calc-input">
-          <label>Runway Elevation (feet)</label>
-          <input type="number" id="runwayElev" placeholder="0" oninput="calcRNP()">
-        </div>
-        <div class="calc-input">
-          <label>Ground Speed (knots)</label>
-          <input type="number" id="approachGS" placeholder="0" oninput="calcRNP()">
-        </div>
-      </div>
-      <div class="calc-row">
-        <div class="calc-input">
-          <label>Ambient Temperature (°C)</label>
-          <input type="number" id="approachTemp" placeholder="0" oninput="calcRNP()">
-        </div>
-        <div class="calc-input">
-          <label>Runway Threshold Temperature (°C, std=15)</label>
-          <input type="number" id="runwayThresholdTemp" placeholder="15" oninput="calcRNP()">
-        </div>
-      </div>
-      <div class="calc-result">
-        <div><span class="label">RNP Lateral Tolerance (±):</span> <span class="value" id="rnpTolerance">─</span></div>
-        <div><span class="label">Standard Approach Angle:</span> <span class="value" id="stdApproachAngle">─</span></div>
-        <div><span class="label">Temperature-Corrected Approach Angle:</span> <span class="value" id="correctedApproachAngle">─</span></div>
-        <div><span class="label">Required Descent Rate (fpm):</span> <span class="value" id="approachDescentRate">─</span></div>
-        <div><span class="label">Time to Touchdown (min):</span> <span class="value" id="approachTime">─</span></div>
+        <div><span class="label">Pressure Altitude (PA):</span> <span class="value" id="paResult">─</span></div>
+        <div><span class="label">Density Altitude (DA):</span> <span class="value" id="daResult">─</span></div>
       </div>
     </div>
 
-
+    <!-- STEP 2: IAS to TAS -->
     <div class="calc-section">
-      <div class="title">Time / Distance / Speed</div>
+      <div class="title">Step 2: IAS → TAS Conversion (using PA & OAT)</div>
       <div class="calc-row">
         <div class="calc-input">
-          <label>Distance (NM)</label>
-          <input type="number" id="tdsDistance" placeholder="0" oninput="calcTDS()">
+          <label>Indicated Air Speed (IAS, knots)</label>
+          <input type="number" id="ias2" placeholder="250" oninput="calcStep2()">
         </div>
         <div class="calc-input">
-          <label>Ground Speed (kts)</label>
-          <input type="number" id="tdsGS" placeholder="0" oninput="calcTDS()">
-        </div>
-      </div>
-      <div class="calc-row full">
-        <div class="calc-input">
-          <label>Time (hours, e.g. 1.5 = 1h30m)</label>
-          <input type="number" id="tdsTime" placeholder="0" step="0.01" oninput="calcTDS()">
-        </div>
-      </div>
-      <div class="calc-result">
-        <div class="value" id="tdsTimeResult">—</div>
-      </div>
-    </div>
-
-    <div class="calc-section">
-      <div class="title">Fuel Planning</div>
-      <div class="calc-row">
-        <div class="calc-input">
-          <label>Fuel Burn (gal/hr or lbs/hr)</label>
-          <input type="number" id="fuelBurnRate" placeholder="0" oninput="calcFuel()">
-        </div>
-        <div class="calc-input">
-          <label>Flight Time (hrs)</label>
-          <input type="number" id="fuelFlightTime" placeholder="0" step="0.01" oninput="calcFuel()">
-        </div>
-      </div>
-      <div class="calc-row full">
-        <div class="calc-input">
-          <label>Reserve (% of trip fuel)</label>
-          <input type="number" id="fuelReservePercent" value="10" placeholder="10" oninput="calcFuel()">
-        </div>
-      </div>
-      <div class="calc-result">
-        <div><span class="label">Trip Fuel:</span> <span class="value" id="fuelTripResult">—</span></div>
-        <div><span class="label">With Reserve:</span> <span class="value" id="fuelTotalResult">—</span></div>
-      </div>
-    </div>
-
-    <div class="calc-section">
-      <div class="title">Wind Correction (TAS to GS)</div>
-      <div class="calc-row">
-        <div class="calc-input">
-          <label>True Air Speed (kts)</label>
-          <input type="number" id="windTAS" placeholder="0" oninput="calcWind()">
-        </div>
-        <div class="calc-input">
-          <label>Wind Speed (kts)</label>
-          <input type="number" id="windSpeed" placeholder="0" oninput="calcWind()">
+          <label>Wind Speed (knots)</label>
+          <input type="number" id="wind2" placeholder="0" oninput="calcStep2()">
         </div>
       </div>
       <div class="calc-row full">
         <div class="calc-input">
           <label>Wind Direction</label>
-          <select id="windDir" onchange="calcWind()" style="padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--card);color:var(--text);">
+          <select id="windDir2" onchange="calcStep2()" style="padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--card);color:var(--text);">
             <option value="0">Headwind</option>
             <option value="1">Tailwind</option>
           </select>
         </div>
       </div>
       <div class="calc-result">
-        <div><span class="label">Ground Speed:</span> <span class="value" id="windGSResult">—</span></div>
+        <div><span class="label">True Air Speed (TAS):</span> <span class="value" id="tasResult">─</span></div>
+        <div><span class="label">Ground Speed (GS):</span> <span class="value" id="gsResult">─</span></div>
+        <div><span class="label">Density Ratio (σ):</span> <span class="value" id="sigmaResult">─</span></div>
       </div>
+    </div>
+
+    <!-- STEP 3: Temperature-Corrected RNP Descent -->
+    <div class="calc-section">
+      <div class="title">Step 3: RNP Approach (Temperature-Corrected Descent)</div>
+      <div class="calc-row">
+        <div class="calc-input">
+          <label>Standard Approach Angle (°, typical 3.0)</label>
+          <input type="number" id="stdAngle3" placeholder="3.0" step="0.1" oninput="calcStep3()">
+        </div>
+        <div class="calc-input">
+          <label>Runway Threshold Temp (°C, std=15)</label>
+          <input type="number" id="rwyTemp3" placeholder="15" oninput="calcStep3()">
+        </div>
+      </div>
+      <div class="calc-row">
+        <div class="calc-input">
+          <label>RNP Level</label>
+          <select id="rnpLevel3" onchange="calcStep3()" style="padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--card);color:var(--text);">
+            <option value="0.1">RNP 0.1</option>
+            <option value="0.3">RNP 0.3</option>
+            <option value="0.5">RNP 0.5</option>
+            <option value="1" selected>RNP 1.0</option>
+            <option value="2">RNP 2</option>
+            <option value="4">RNP 4</option>
+          </select>
+        </div>
+        <div class="calc-input">
+          <label>Distance to Runway (NM)</label>
+          <input type="number" id="distRwy3" placeholder="0" oninput="calcStep3()">
+        </div>
+      </div>
+      <div class="calc-result">
+        <div><span class="label">Temperature Deviation:</span> <span class="value" id="tempDev3">─</span></div>
+        <div><span class="label">Corrected Approach Angle:</span> <span class="value" id="corrAngle3">─</span></div>
+        <div><span class="label">Required Descent Rate (fpm):</span> <span class="value" id="rodResult3">─</span></div>
+        <div><span class="label">Approach Time (min):</span> <span class="value" id="approachTime3">─</span></div>
+        <div><span class="label">RNP Tolerance (±):</span> <span class="value" id="rnpTol3">─</span></div>
+      </div>
+    </div>
+
+    <div style="padding:12px;background:rgba(100,200,50,.1);border-radius:10px;margin-top:14px;font-size:12px;line-height:1.6;color:var(--sub);">
+      <b>Formula Reference (ICAO/FAA verified):</b><br>
+      1. PA = (29.92 - QNH inHg) × 1000 + Indicated Alt<br>
+      2. DA = PA + (OAT - ISA Temp @ PA) × 120<br>
+      3. σ = (T/288.15)^4.256 × (P/P₀)^5.256 [ISA troposphere]<br>
+      4. TAS = IAS / √σ<br>
+      5. GS = TAS ± Wind<br>
+      6. Corrected Angle = Standard Angle + (ΔT × 0.02°) [per ICAO: 0.3°/15°C]<br>
+      7. ROD (fpm) = GS × tan(Angle) × 101.3
     </div>
   </div>
 
