@@ -2132,13 +2132,13 @@ function calcAll(){
     setResult('rPA', Math.round(pa) + ' ft');
     setResult('rDA', Math.round(da) + ' ft');
     
-    // ===== STEP 2: TAS (2% per 1000ft rule) =====
-    // TAS = IAS × [1 + (PA/1000 × 0.02)]
-    var tas = 0;
+    // ===== STEP 2: Corrected Speed (用 DA) =====
+    // 基础修正速度 = IAS × [1 + (DA/1000 × 0.02)]
+    var correctedSpeed = 0;
     if(ias > 0){
-      tas = ias * (1 + (pa / 1000) * 0.02);
-      setResult('rTAS', Math.round(tas) + ' kts');
-      setResult('rSigma', '(2%/1000ft rule)');
+      correctedSpeed = ias * (1 + (da / 1000) * 0.02);
+      setResult('rTAS', Math.round(correctedSpeed) + ' kts');
+      setResult('rSigma', '(DA-corrected)');
     } else {
       setResult('rTAS', '─');
       setResult('rSigma', '─');
@@ -2146,14 +2146,14 @@ function calcAll(){
     
     // ===== STEP 3: WIND & NAVIGATION =====
     var wca = 0, gs = 0, heading = 0, windAngle = 0, windCompStr = '─';
-    if(tas > 0 && windSpeed > 0){
+    if(correctedSpeed > 0 && windSpeed > 0){
       windAngle = windDir - finalTrack;
       while(windAngle > 180) windAngle -= 360;
       while(windAngle < -180) windAngle += 360;
       var windAngleAbs = Math.abs(windAngle);
       var windAngleRad = windAngle * Math.PI / 180;
       
-      var wcaArg = (windSpeed * Math.sin(windAngleRad)) / tas;
+      var wcaArg = (windSpeed * Math.sin(windAngleRad)) / correctedSpeed;
       wcaArg = Math.max(-1, Math.min(1, wcaArg));
       wca = Math.asin(wcaArg) * 180 / Math.PI;
       
@@ -2161,7 +2161,7 @@ function calcAll(){
       while(heading < 0) heading += 360;
       while(heading >= 360) heading -= 360;
       
-      gs = Math.sqrt(Math.pow(tas, 2) + Math.pow(windSpeed, 2) - 2 * tas * windSpeed * Math.cos(windAngleRad));
+      gs = Math.sqrt(Math.pow(correctedSpeed, 2) + Math.pow(windSpeed, 2) - 2 * correctedSpeed * windSpeed * Math.cos(windAngleRad));
       
       var hwComponent = windSpeed * Math.cos(windAngleRad);
       windCompStr = hwComponent > 0 ? Math.abs(hwComponent).toFixed(1) + ' kts headwind' 
@@ -2186,7 +2186,7 @@ function calcAll(){
     var rod = 0;
     var appTime = 0;
     
-    if(gs > 0){
+    if(correctedSpeed > 0){
       var angleRad = corrAngle * -1 * Math.PI / 180;
       rod = gs * 101.3 * Math.tan(angleRad);
       appTime = distRwy > 0 ? (distRwy / gs) * 60 : 0;
