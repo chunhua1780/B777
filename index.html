@@ -2155,10 +2155,11 @@ function calcRNP(){
   // 标准进近角(通常 2.5-3.5°)
   var stdAngle = approachAngle;
   
-  // 温度修正:气温每高1°C,空气密度降低,飞机性能下降,需要更陡的下降角
-  // 修正系数约 0.1-0.15°/°C 的温差
+  // 温度修正:每 15°C 高于 ISA,进近角增加 0.3°(IAO PANS OPS)
+  // 简化为:每 1°C 高于标准温度,增加约 0.02° 进近角
+  // 高温 → 空气密度低 → 需要更陡角度保持下降率
   var tempDeviation = tempAmbient - tempRunway;
-  var tempCorrAngle = stdAngle + (tempDeviation * 0.12); // 每°C 增加 0.12° 下降角
+  var tempCorrAngle = stdAngle + (tempDeviation * 0.02); // 每°C 增加 0.02° 下降角(正确系数)
   
   // 下降高度 (当前 - 跑道标高)
   var altToDrop = curAlt - rwElev;
