@@ -2111,13 +2111,18 @@ function fmtDur(sec){
 }
 function openAdmin(){ show('admin'); renderAdmin(); }
 async function adminResetPw(userId, label){
-  if(!confirm('Reset password for '+label+'? A new temp password will be generated.')) return;
-  var r = await sb.functions.invoke('admin-reset-password', { body: { user_id: userId } });
+  var pw = prompt('Set new password for '+label+' (leave blank to auto-generate a random one, min 6 chars):', '');
+  if(pw === null) return; // cancelled
+  pw = pw.trim();
+  if(pw && pw.length < 6){ alert('Password must be at least 6 characters.'); return; }
+  var body = { user_id: userId };
+  if(pw) body.new_password = pw;
+  var r = await sb.functions.invoke('admin-reset-password', { body: body });
   if(r.error || (r.data && r.data.error)){
     alert('Failed: ' + (r.error ? r.error.message : r.data.error));
     return;
   }
-  prompt('New temp password for '+label+' (copy & send to them):', r.data.new_password);
+  alert('Password reset for '+label+'. New password: ' + r.data.new_password);
 }
 async function renderAdmin(){
   var today = new Date().toISOString().slice(0,10);
