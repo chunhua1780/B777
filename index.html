@@ -1768,6 +1768,10 @@ async function doReset(){
 }
 // ── activity heartbeat + profile touch ──
 var hbTimer = null;
+// Set to true only once enforceDeviceLimit() has successfully claimed this device's slot.
+// Until then a missing row means "not registered yet", NOT "evicted" — never sign out on it.
+var _devRegistered = false;
+var _devMissCount = 0;
 async function beat(){
   try{
     if(document.visibilityState!=='visible' || !navigator.onLine || !sb) return;
@@ -1776,13 +1780,20 @@ async function beat(){
     var uid = s.data.session.user.id, me = deviceId();
     // If a newer device logged in and evicted us, this row is gone — sign out here instead.
     var check = await sb.from('b777_devices').select('device_id').eq('user_id', uid);
+    if(check.error){ return; }                       // query failed — never sign out on an error
     var rows = check.data || [];
-    if(rows.length > 0 && !rows.some(function(x){ return x.device_id === me; })){
-      try{ await sb.auth.signOut(); }catch(e){}
-      alert('You\'ve been signed out because this account was signed in on a new device.');
-      location.reload();
+    var missing = rows.length > 0 && !rows.some(function(x){ return x.device_id === me; });
+    if(missing && _devRegistered){
+      _devMissCount++;
+      if(_devMissCount >= 2){                        // confirm twice before kicking (network flake guard)
+        try{ await sb.auth.signOut(); }catch(e){}
+        alert('You\'ve been signed out because this account was signed in on a new device.');
+        location.reload();
+        return;
+      }
       return;
     }
+    if(!missing) _devMissCount = 0;
     await sb.rpc('b777_heartbeat');
     await sb.from('b777_devices').upsert({ user_id: uid, device_id: me, last_seen: new Date().toISOString() });
   }catch(e){}
@@ -1821,8 +1832,10 @@ async function signOut(){
 }
 function enterApp(){
   setTimeout(checkOffline, 300);
-  enforceDeviceLimit().then(function(ok){ if(ok) cloudPull(); });
-  touchProfile(); startHeartbeat();
+  // Register this device BEFORE the heartbeat starts, otherwise the first beat runs while
+  // our row doesn't exist yet and the freshly signed-in device kicks itself out.
+  enforceDeviceLimit().then(function(ok){ if(ok) cloudPull(); startHeartbeat(); });
+  touchProfile();
   try{
     var st = localStorage.getItem('b777_staff');
     var w = document.getElementById('whoami');
@@ -1881,7 +1894,8 @@ async function initAuth(){
   show('auth');
 }
 
-// ═══ Cloud sync: per-user progress (cards + streak) & 2-device limit ═══
+// ═══ Cloud sync: per-user progress (cards + streak) & device limit ═══
+var MAX_DEVICES = 5;   // most-recently-used devices kept per account; older ones are evicted
 function deviceId(){
   var d = null;
   try{ d = localStorage.getItem('b777_device'); }catch(e){}
@@ -1946,24 +1960,25 @@ async function enforceDeviceLimit(){
     if(!navigator.onLine || !sb) return true;
     var s = await sb.auth.getSession(); if(!(s.data && s.data.session)) return true;
     var uid = s.data.session.user.id, me = deviceId();
-    var r = await sb.from('b777_devices').select('device_id,last_seen').eq('user_id', uid).order('last_seen',{ascending:false});
-    var rows = r.data || [];
-    var known = rows.some(function(x){ return x.device_id === me; });
-    if(!known && rows.length >= 2){
-      // Always keep the newest logged-in device(s); silently evict the oldest so this new
-      // device can take a slot. No confirmation prompt here — the evicted device finds out
-      // on its own next heartbeat instead.
-      var keepMostRecent = rows.slice(0, 1); // keep only the single most-recently-seen existing device
-      var toEvict = rows.slice(1);
-      for(var i=0;i<toEvict.length;i++){
-        try{ await sb.from('b777_devices').delete().eq('user_id', uid).eq('device_id', toEvict[i].device_id); }catch(e){}
-      }
-    }
-    await sb.from('b777_devices').upsert({
+    // 1) Claim our own slot FIRST. This device just signed in, so it is now the newest —
+    //    it must exist in the table before any heartbeat can look for it.
+    var up = await sb.from('b777_devices').upsert({
       user_id: uid, device_id: me,
       device_name: String(navigator.platform || 'device').slice(0,40),
       last_seen: new Date().toISOString()
     });
+    if(up.error) return true;                        // couldn't register — stay signed in, retry next beat
+    _devRegistered = true;
+    _devMissCount = 0;
+    // 2) Keep the MAX_DEVICES most recently seen devices (we are one of them); evict the rest.
+    //    The evicted device finds out on its own next heartbeat — no prompt on this device.
+    var r = await sb.from('b777_devices').select('device_id,last_seen').eq('user_id', uid).order('last_seen',{ascending:false});
+    var rows = r.data || [];
+    var toEvict = rows.slice(MAX_DEVICES);
+    for(var i=0;i<toEvict.length;i++){
+      if(toEvict[i].device_id === me) continue;      // never evict ourselves
+      try{ await sb.from('b777_devices').delete().eq('user_id', uid).eq('device_id', toEvict[i].device_id); }catch(e){}
+    }
   }catch(e){}
   return true;
 }
@@ -2285,7 +2300,7 @@ async function renderAdmin(){
 
 
 // ═══ Smart Version Check (auto-update, keeps offline working) ═══
-var APP_VERSION = '48';  // must match version.json — bump on every deploy
+var APP_VERSION = '50';  // must match version.json — bump on every deploy
 async function checkVersion(){
   // Only run online; offline we happily use the cached app.
   if(!navigator.onLine) return;
