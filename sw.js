@@ -1,9 +1,15 @@
-const CACHE = 'b777-v50';
+const CACHE = 'b777-v51';
 const ASSETS = ['./', './index.html', './questions.js', './supabase.js', './manifest.json', './icon192.png', './icon512.png', './icon-maskable.png', './duty-manager.html', './manual-reader.html'];
 const PAGES = ['./index.html', './duty-manager.html', './manual-reader.html'];
 
 self.addEventListener('install', function(e){
-  e.waitUntil(caches.open(CACHE).then(function(c){ return c.addAll(ASSETS.map(function(u){ return new Request(u, {cache:'reload'}); })); }));
+  e.waitUntil(caches.open(CACHE).then(function(c){
+    return Promise.all(ASSETS.map(function(u){
+      return c.add(new Request(u, {cache:'reload'})).catch(function(err){
+        console.warn('[sw] could not precache', u, err);   // keep going: partial cache beats none
+      });
+    }));
+  }));
   self.skipWaiting();
 });
 
@@ -29,6 +35,8 @@ async function cleanResponse(resp){
 self.addEventListener('fetch', function(e){
   if(e.request.method !== 'GET') return;
   var url = e.request.url;
+  // Never intercept cross-origin traffic (Supabase auth/REST/realtime).
+  try{ if(new URL(url).origin !== self.location.origin) return; }catch(err){ return; }
 
   // version.json must ALWAYS hit the network so version checks work
   if(url.indexOf('version.json') > -1){
@@ -70,11 +78,16 @@ self.addEventListener('fetch', function(e){
     caches.match(e.request, {ignoreSearch:true}).then(function(cached){
       if(cached) return cached;
       return fetch(e.request).then(function(resp){
+        if(!resp || !resp.ok) return resp;
         return caches.open(CACHE).then(function(c){
           c.put(e.request, resp.clone());
           return resp;
         });
-      }).catch(function(){});
+      }).catch(function(){
+        return caches.match(e.request, {ignoreSearch:true}).then(function(c2){
+          return c2 || new Response('', {status:503, statusText:'Offline'});
+        });
+      });
     })
   );
 });

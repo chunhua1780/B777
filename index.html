@@ -1730,7 +1730,9 @@ async function doSignUp(){
   // store profile + hashed security answers
   var h1 = await ansHash(a1), h2 = await ansHash(a2);
   await sb.from('b777_profiles').upsert({ user_id: r.data.session.user.id, staff_id: staff, email: email, q1_hash: h1, q2_hash: h2, last_seen: new Date().toISOString() });
-  enterApp();
+  OFFLINE_MODE = false;
+  savePass(r.data.session.user.id, staff);
+  enterApp(true);
 }
 async function doSignIn(){
   var staff = gv('authStaff').trim(), pass = gv('authPass');
@@ -1747,7 +1749,9 @@ async function doSignIn(){
     return;
   }
   try{ localStorage.setItem('b777_staff', staff); }catch(e){}
-  enterApp();
+  OFFLINE_MODE = false;
+  if(r.data && r.data.session) savePass(r.data.session.user.id, staff);
+  enterApp(true);
 }
 async function doReset(){
   var staff = gv('authStaff').trim();
@@ -1786,6 +1790,7 @@ async function beat(){
     if(missing && _devRegistered){
       _devMissCount++;
       if(_devMissCount >= 2){                        // confirm twice before kicking (network flake guard)
+        clearPass();
         try{ await sb.auth.signOut(); }catch(e){}
         alert('You\'ve been signed out because this account was signed in on a new device.');
         location.reload();
@@ -1814,38 +1819,54 @@ async function touchProfile(){
         await sb.from('b777_profiles').upsert({ user_id: u.id, staff_id: staff, email: u.email || '', last_seen: new Date().toISOString() }, { ignoreDuplicates: false });
       }catch(netErr){ console.error('profile upsert failed, continuing anyway', netErr); }
     }
-    if(u.app_metadata && u.app_metadata.b777_admin === true){
-      document.getElementById('adminCard').style.display = '';
-    }
-    // Duty Manager, Flight Calculator and Manual Reader are restricted to a single admin account.
-    if(String(staff) === '467988'){
-      var cc = document.getElementById('calcCard'); if(cc) cc.style.display = '';
-      var dc = document.getElementById('dutyManagerCard'); if(dc) dc.style.display = '';
-      var mc = document.getElementById('manualReaderCard'); if(mc) mc.style.display = '';
-    }
+    savePass(u.id, staff);   // renew the offline pass on every good online session
+    applyRoles(staff, !!(u.app_metadata && u.app_metadata.b777_admin === true));
   }catch(e){}
 }
 async function signOut(){
   if(!confirm('Sign out on this device?')) return;
+  clearPass();
+  OFFLINE_MODE = false;
   try{ await sb.auth.signOut(); }catch(e){}
   location.reload();
 }
-function enterApp(){
+function applyRoles(staff, isAdmin){
+  if(isAdmin){ var a = document.getElementById('adminCard'); if(a) a.style.display = ''; }
+  // Duty Manager, Flight Calculator and Manual Reader are restricted to a single admin account.
+  if(String(staff) === '467988'){
+    var cc = document.getElementById('calcCard'); if(cc) cc.style.display = '';
+    var dc = document.getElementById('dutyManagerCard'); if(dc) dc.style.display = '';
+    var mc = document.getElementById('manualReaderCard'); if(mc) mc.style.display = '';
+  }
+}
+// Offline we have no profile row to read, so drive the same UI off the local pass.
+function applyRolesFromPass(){
+  var p = readPass(); if(!p) return;
+  var staff = p.staff;
+  if(!staff){ try{ staff = localStorage.getItem('b777_staff') || ''; }catch(e){} }
+  applyRoles(staff, false);
+}
+function enterApp(fresh){
   setTimeout(checkOffline, 300);
-  // Register this device BEFORE the heartbeat starts, otherwise the first beat runs while
-  // our row doesn't exist yet and the freshly signed-in device kicks itself out.
-  enforceDeviceLimit().then(function(ok){ if(ok) cloudPull(); startHeartbeat(); });
-  touchProfile();
-  try{
-    var st = localStorage.getItem('b777_staff');
-    var w = document.getElementById('whoami');
-    if(w) w.textContent = st ? ('Staff ' + st) : 'Signed in';
-  }catch(e){}
+  // Ask the browser to keep our cache/IndexedDB. Safari evicts unused site data
+  // after ~7 days otherwise, which would silently kill offline mode on iPhones.
+  try{ if(navigator.storage && navigator.storage.persist) navigator.storage.persist(); }catch(e){}
+  if(OFFLINE_MODE){
+    applyRolesFromPass();
+    startHeartbeat();          // no-ops while offline, resyncs as soon as we are back
+  } else {
+    // Register this device BEFORE the heartbeat starts, otherwise the first beat runs while
+    // our row doesn't exist yet and the freshly signed-in device kicks itself out.
+    enforceDeviceLimit(fresh === true).then(function(ok){ if(ok) cloudPull(); startHeartbeat(); });
+    touchProfile();
+    checkMustChangePassword();
+  }
+  setOfflineBadge();
   show('home'); renderHome();
-  checkMustChangePassword();
 }
 async function checkMustChangePassword(){
   try{
+    if(OFFLINE_MODE || !navigator.onLine || !sb) return;
     var u = await sb.auth.getUser();
     var meta = u && u.data && u.data.user && u.data.user.user_metadata;
     if(meta && meta.must_change_password){ showForceChangePasswordModal(); }
@@ -1884,18 +1905,84 @@ async function submitForceChangePassword(){
   var modal = document.getElementById('forcePwModal');
   if(modal) modal.remove();
 }
+// ═══ Offline pass ═══════════════════════════════════════════════════════════
+// Supabase access tokens expire after ~1h. Offline, getSession() cannot refresh
+// them and returns null -> the app used to fall back to the login screen, which
+// then refuses to sign in because navigator.onLine is false. That is why the app
+// 'would not open without internet'. We therefore keep our own long-lived local
+// pass, renewed on every successful online session, so the app opens and all
+// practice works offline for OFFLINE_DAYS. Signing out or being evicted by the
+// device limit clears it immediately.
+var PASS_KEY = 'b777_pass';
+var OFFLINE_DAYS = 30;
+var OFFLINE_MODE = false;          // true = running on the local pass, no live session
+function savePass(uid, staff){
+  try{ localStorage.setItem(PASS_KEY, JSON.stringify({
+    uid: uid, staff: staff || '', exp: Date.now() + OFFLINE_DAYS*86400000
+  })); }catch(e){}
+}
+function readPass(){
+  try{
+    var p = JSON.parse(localStorage.getItem(PASS_KEY) || 'null');
+    return (p && p.uid && p.exp > Date.now()) ? p : null;
+  }catch(e){ return null; }
+}
+function clearPass(){ try{ localStorage.removeItem(PASS_KEY); }catch(e){} }
+
+// getSession() can hang for a long time offline while it retries a token refresh,
+// so never let it block the boot for more than a few seconds.
+async function liveSession(ms){
+  if(!sb) return null;
+  try{
+    var s = await Promise.race([
+      sb.auth.getSession(),
+      new Promise(function(r){ setTimeout(function(){ r(null); }, ms || 6000); })
+    ]);
+    return (s && s.data && s.data.session) ? s.data.session : null;
+  }catch(e){ return null; }
+}
+
 async function initAuth(){
   if(!sb){ enterApp(); return; } // never lock users out if the auth library fails
-  try{
-    var s = await sb.auth.getSession();
-    if(s.data && s.data.session){ enterApp(); return; }
-  }catch(e){ enterApp(); return; }
+  var sess = await liveSession(6000);
+  if(sess){
+    savePass(sess.user.id, (sess.user.user_metadata && sess.user.user_metadata.staff_id) || '');
+    enterApp(false);
+    return;
+  }
+  if(readPass()){                 // no live session, but this device is still authorised
+    OFFLINE_MODE = true;
+    enterApp(false);
+    return;
+  }
   authMode('signin');
   show('auth');
 }
 
+// When the network comes back, quietly upgrade from the offline pass to a real
+// session: renew the pass, claim our device slot and sync progress.
+window.addEventListener('online', function(){
+  if(!OFFLINE_MODE || !sb) return;
+  liveSession(8000).then(function(s){
+    if(!s) return;
+    OFFLINE_MODE = false;
+    savePass(s.user.id, (s.user.user_metadata && s.user.user_metadata.staff_id) || '');
+    enforceDeviceLimit(false).then(function(){ cloudPull(); });
+    touchProfile();
+    setOfflineBadge();
+  });
+});
+
+function setOfflineBadge(){
+  var w = document.getElementById('whoami');
+  if(!w) return;
+  var st = '';
+  try{ st = localStorage.getItem('b777_staff') || ''; }catch(e){}
+  w.textContent = (st ? 'Staff ' + st : 'Signed in') + (OFFLINE_MODE ? ' · offline' : '');
+}
+
 // ═══ Cloud sync: per-user progress (cards + streak) & device limit ═══
-var MAX_DEVICES = 5;   // most-recently-used devices kept per account; older ones are evicted
+var MAX_DEVICES = 4;   // a shared account may be signed in on 4 devices at once
 function deviceId(){
   var d = null;
   try{ d = localStorage.getItem('b777_device'); }catch(e){}
@@ -1955,24 +2042,29 @@ saveCards = function(){ saveCardsLocal(); scheduleCloudPush(); };
 var bumpStreakLocal = bumpStreak;
 bumpStreak = function(){ bumpStreakLocal(); scheduleCloudPush(); };
 
-async function enforceDeviceLimit(){
+async function enforceDeviceLimit(fresh){
   try{
-    if(!navigator.onLine || !sb) return true;
+    if(OFFLINE_MODE || !navigator.onLine || !sb) return true;
     var s = await sb.auth.getSession(); if(!(s.data && s.data.session)) return true;
     var uid = s.data.session.user.id, me = deviceId();
-    // 1) Claim our own slot FIRST. This device just signed in, so it is now the newest —
-    //    it must exist in the table before any heartbeat can look for it.
-    var up = await sb.from('b777_devices').upsert({
-      user_id: uid, device_id: me,
-      device_name: String(navigator.platform || 'device').slice(0,40),
-      last_seen: new Date().toISOString()
-    });
-    if(up.error) return true;                        // couldn't register — stay signed in, retry next beat
+    var now = new Date().toISOString();
+    // 1) Claim our own slot FIRST -- it must exist in the table before any
+    //    heartbeat looks for it, or the device kicks itself out.
+    //    created_at is only stamped on a real sign-in, so merely reopening the
+    //    app never makes this device look 'newer' than the others.
+    var row = { user_id: uid, device_id: me,
+                device_name: String(navigator.platform || 'device').slice(0,40),
+                last_seen: now };
+    if(fresh) row.created_at = now;
+    var up = await sb.from('b777_devices').upsert(row);
+    if(up.error) return true;                        // couldn't register -- stay signed in, retry next beat
     _devRegistered = true;
     _devMissCount = 0;
-    // 2) Keep the MAX_DEVICES most recently seen devices (we are one of them); evict the rest.
-    //    The evicted device finds out on its own next heartbeat — no prompt on this device.
-    var r = await sb.from('b777_devices').select('device_id,last_seen').eq('user_id', uid).order('last_seen',{ascending:false});
+    // 2) Keep the MAX_DEVICES newest LOGINS (we are one of them); evict the oldest.
+    //    Ordering by created_at, not last_seen, means a device that is simply
+    //    offline for a while is never evicted -- only newer sign-ins push it out.
+    //    The evicted device finds out on its own next heartbeat.
+    var r = await sb.from('b777_devices').select('device_id,created_at').eq('user_id', uid).order('created_at',{ascending:false});
     var rows = r.data || [];
     var toEvict = rows.slice(MAX_DEVICES);
     for(var i=0;i<toEvict.length;i++){
@@ -2160,7 +2252,8 @@ function fmtTime(h){
 var OFFLINE_ASSETS = ['./', './index.html', './questions.js', './supabase.js', './manifest.json', './icon192.png', './icon512.png'];
 async function offlineCacheName(){
   var keys = await caches.keys();
-  var mine = keys.filter(function(k){ return k.indexOf('b777-')===0; }).sort();
+  var num = function(k){ var m = k.match(/b777-v(\d+)/); return m ? parseInt(m[1],10) : -1; };
+  var mine = keys.filter(function(k){ return k.indexOf('b777-')===0; }).sort(function(a,b){ return num(a)-num(b); });
   return mine.length ? mine[mine.length-1] : 'b777-manual';
 }
 async function checkOffline(){
@@ -2300,7 +2393,7 @@ async function renderAdmin(){
 
 
 // ═══ Smart Version Check (auto-update, keeps offline working) ═══
-var APP_VERSION = '50';  // must match version.json — bump on every deploy
+var APP_VERSION = '51';  // must match version.json — bump on every deploy
 async function checkVersion(){
   // Only run online; offline we happily use the cached app.
   if(!navigator.onLine) return;
@@ -2322,10 +2415,10 @@ async function checkVersion(){
     if(serverVersion && serverVersion !== localVersion){
       // New version available → clear caches once and hard-reload
       try{ localStorage.setItem('b777_app_version', serverVersion); }catch(e){}
-      if(window.caches){
-        var keys = await caches.keys();
-        await Promise.all(keys.filter(function(k){ return k.indexOf('b777')===0; }).map(function(k){ return caches.delete(k); }));
-      }
+      // NOTE: never delete caches here. The service worker installs the new
+      // cache first and only deletes the old one on activate, so there is always
+      // a complete offline copy. Deleting here left users with nothing cached if
+      // the network died mid-reload -- that was the main 'offline wont open' bug.
       if('serviceWorker' in navigator){
         var regs = await navigator.serviceWorker.getRegistrations();
         await Promise.all(regs.map(function(r){ return r.update(); }));
