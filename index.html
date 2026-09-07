@@ -1982,7 +1982,7 @@ function setOfflineBadge(){
 }
 
 // ═══ Cloud sync: per-user progress (cards + streak) & device limit ═══
-var MAX_DEVICES = 4;   // a shared account may be signed in on 4 devices at once
+var MAX_DEVICES = 5;   // a shared account may be signed in on 5 devices at once
 function deviceId(){
   var d = null;
   try{ d = localStorage.getItem('b777_device'); }catch(e){}
@@ -2393,7 +2393,7 @@ async function renderAdmin(){
 
 
 // ═══ Smart Version Check (auto-update, keeps offline working) ═══
-var APP_VERSION = '51';  // must match version.json — bump on every deploy
+var APP_VERSION = '52';  // must match version.json — bump on every deploy
 async function checkVersion(){
   // Only run online; offline we happily use the cached app.
   if(!navigator.onLine) return;
