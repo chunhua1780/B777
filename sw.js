@@ -1,4 +1,4 @@
-const CACHE = 'b777-v52';
+const CACHE = 'b777-v53';
 const ASSETS = ['./', './index.html', './questions.js', './supabase.js', './manifest.json', './icon192.png', './icon512.png', './icon-maskable.png', './duty-manager.html', './manual-reader.html'];
 const PAGES = ['./index.html', './duty-manager.html', './manual-reader.html'];
 
