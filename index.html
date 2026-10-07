@@ -857,6 +857,13 @@
           <div class="q-text" id="qText">…</div>
           <div id="ansList"></div>
           <div class="ref-box" id="refBox"></div>
+          <div class="ref-box" id="qNotesBox">
+            <b>Notes &amp; Sources</b>
+            <div id="qNotesList" style="margin:10px 0 12px;"></div>
+            <textarea class="auth-input" id="qNoteText" maxlength="500" style="min-height:56px;margin-bottom:8px;" placeholder="Add a note for others — e.g. cite the FCOM/QRH page this answer comes from"></textarea>
+            <div class="auth-msg" id="qNoteMsg"></div>
+            <button class="big-btn secondary" style="padding:9px;font-size:13px;margin-top:2px;" onclick="submitQuestionNote()">Post note</button>
+          </div>
           <div class="quiz-actions">
             <button class="big-btn secondary" id="prevBtn" onclick="prevQuestion()">‹ Prev</button>
             <button class="big-btn" id="submitBtn" disabled onclick="submitAnswer()">Check</button>
@@ -1445,6 +1452,17 @@ function renderQuestion(){
   } else {
     refBox.className = 'ref-box';
     refBox.innerHTML = '';
+  }
+
+  var notesBox = document.getElementById('qNotesBox');
+  if(graded){
+    notesBox.className = 'ref-box show';
+    document.getElementById('qNoteText').value = '';
+    document.getElementById('qNoteMsg').className = 'auth-msg';
+    loadQuestionNotes(q.id);
+  } else {
+    notesBox.className = 'ref-box';
+    QNOTES_QID = null;
   }
 
   var list = document.getElementById('ansList');
@@ -2226,6 +2244,35 @@ async function submitComment(){
   msg.className='auth-msg'; inp.value=''; loadComments();
 }
 
+// ── Per-question community notes (e.g. "this answer is from FCOM 14.20") ──
+// Shown only once a question is graded/revealed, newest note first. Anyone
+// signed in can add one -- this is the in-app alternative to filing a GitHub
+// correction issue when all you want to do is point at a source.
+var QNOTES_QID = null;   // guards a slow fetch from overwriting a newer question's list
+async function loadQuestionNotes(qid){
+  QNOTES_QID = qid;
+  var list = document.getElementById('qNotesList');
+  list.innerHTML = '<div class="empty-note">Loading…</div>';
+  if(!navigator.onLine || !sb){ list.innerHTML = '<div class="empty-note">You are offline — notes need a connection.</div>'; return; }
+  var r = await sb.from('b777_question_notes').select('*').eq('question_id', qid).order('created_at',{ascending:false}).limit(100);
+  if(QNOTES_QID !== qid) return;   // user already moved to another question
+  if(r.error){ list.innerHTML = '<div class="empty-note">Could not load notes.</div>'; return; }
+  list.innerHTML = (r.data && r.data.length) ? r.data.map(function(c){
+    return '<div class="comment"><div class="cm">'+esc(dispName(c.nickname))+' · '+fmtTime(c.created_at)+'</div><div class="ct">'+esc(c.text)+'</div></div>';
+  }).join('') : '<div class="empty-note">No notes yet — be the first to add a source or tip.</div>';
+}
+async function submitQuestionNote(){
+  var qid = QNOTES_QID;
+  var inp = document.getElementById('qNoteText');
+  var t = inp.value.trim(); if(!t) return;
+  var msg = document.getElementById('qNoteMsg'); msg.className = 'auth-msg';
+  if(!navigator.onLine || !sb){ msg.className='auth-msg err'; msg.textContent='You are offline — try again when connected.'; return; }
+  var r = await sb.from('b777_question_notes').insert({ question_id: qid, text: t.slice(0,500), nickname: getNick() });
+  if(r.error){ msg.className='auth-msg err'; msg.textContent='Failed: '+r.error.message; return; }
+  inp.value = '';
+  loadQuestionNotes(qid);
+}
+
 // ═══ Flight Calculator ═══
 async function openCalc(){
   try{
@@ -2235,13 +2282,6 @@ async function openCalc(){
     if(String(staff) !== '467988'){ alert('This feature is restricted.'); return; }
   }catch(e){ return; }
   show('calc');
-}
-function fmtTime(h){
-  if(!h || h==null || isNaN(h)) return '—';
-  var hrs = Math.floor(h);
-  var mins = Math.round((h - hrs) * 60);
-  if(mins===60){ hrs++; mins=0; }
-  return hrs+'h '+(mins<10?'0':'')+mins+'m';
 }
 
 
@@ -2393,7 +2433,7 @@ async function renderAdmin(){
 
 
 // ═══ Smart Version Check (auto-update, keeps offline working) ═══
-var APP_VERSION = '53';  // must match version.json — bump on every deploy
+var APP_VERSION = '54';  // must match version.json — bump on every deploy
 async function checkVersion(){
   // Only run online; offline we happily use the cached app.
   if(!navigator.onLine) return;
