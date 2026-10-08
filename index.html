@@ -617,6 +617,7 @@
     </div>
     <div class="card">
       <h2 style="font-size:16px;">Users</h2>
+      <input class="auth-input" id="adUserSearch" type="search" placeholder="Search by staff ID…" style="margin-bottom:10px;" oninput="searchAdUsers(this.value)">
       <div id="adUserList"><div class="empty-note">Loading…</div></div>
     </div>
     <div class="card">
@@ -2367,7 +2368,44 @@ function fmtDur(sec){
   var hrs = Math.floor(sec/3600), m = Math.round((sec%3600)/60);
   return hrs>0 ? hrs+'h '+m+'m' : m+'m';
 }
-function openAdmin(){ show('admin'); renderAdmin(); }
+function openAdmin(){
+  var s = document.getElementById('adUserSearch'); if(s) s.value = '';
+  show('admin'); renderAdmin();
+}
+// Cached from the last renderAdmin() fetch, so clearing the search box
+// re-shows the full list without re-hitting the network.
+var AD_PROFILES = [], AD_BYUSER = {};
+function adUserRowHtml(p, byUser){
+  var a = byUser[p.user_id] || { sec:0, views:0 };
+  return '<div class="ad-row"><div><div class="au">'+esc(p.staff_id||'?')+'</div><div style="color:var(--sub);font-size:12px;">joined '+fmtTime(p.created_at)+'</div></div>'
+    + '<div class="am">'+fmtDur(a.sec)+' · '+a.views+' views<br>last: '+fmtTime(p.last_seen)+'</div>'
+    + '<button class="ad-reset-btn" style="margin-left:8px;font-size:12px;padding:4px 10px;border-radius:8px;border:1px solid var(--line);background:transparent;color:var(--sub);cursor:pointer;" onclick="adminResetPw(\''+p.user_id+'\',\''+esc(p.staff_id||'this user')+'\')">Reset PW</button></div>';
+}
+function renderAdUserRows(rows, emptyMsg){
+  document.getElementById('adUserList').innerHTML = rows.length
+    ? rows.map(function(p){ return adUserRowHtml(p, AD_BYUSER); }).join('')
+    : '<div class="empty-note">'+(emptyMsg||'No users yet.')+'</div>';
+}
+// Search by staff ID -- the full list can run to hundreds of users, so typing
+// a (debounced) ID queries Supabase directly instead of only filtering
+// whatever happened to be in the first 500 loaded by renderAdmin().
+var AD_SEARCH_T = null;
+function searchAdUsers(term){
+  clearTimeout(AD_SEARCH_T);
+  term = (term||'').trim();
+  if(!term){ renderAdUserRows(AD_PROFILES); return; }
+  document.getElementById('adUserList').innerHTML = '<div class="empty-note">Searching…</div>';
+  AD_SEARCH_T = setTimeout(function(){ adRunUserSearch(term); }, 300);
+}
+async function adRunUserSearch(term){
+  var pattern = '%' + term.replace(/[%_\\]/g, '\\$&') + '%';
+  var r = await sb.from('b777_profiles').select('*').ilike('staff_id', pattern).order('last_seen',{ascending:false}).limit(50);
+  // the box may hold a newer term by the time this resolves -- drop stale results
+  var cur = (document.getElementById('adUserSearch').value || '').trim();
+  if(cur !== term) return;
+  if(r.error){ document.getElementById('adUserList').innerHTML = '<div class="empty-note">'+esc(r.error.message)+'</div>'; return; }
+  renderAdUserRows(r.data || [], 'No users match ID "'+esc(term)+'".');
+}
 async function adminResetPw(userId, label){
   var pw = prompt('Set new password for '+label+' (leave blank to reset to the default temporary password 123456, min 6 chars):', '');
   if(pw === null) return; // cancelled
@@ -2417,12 +2455,8 @@ async function renderAdmin(){
   var mAll = await sb.from('b777_chat').select('id',{count:'exact',head:true});
   var mToday = await sb.from('b777_chat').select('id',{count:'exact',head:true}).gte('created_at', todayStart);
   document.getElementById('adMsgs').textContent = (mToday.count||0) + ' / ' + (mAll.count||0);
-  document.getElementById('adUserList').innerHTML = profs.data.length ? profs.data.map(function(p){
-    var a = byUser[p.user_id] || { sec:0, views:0 };
-    return '<div class="ad-row"><div><div class="au">'+esc(p.staff_id||'?')+'</div><div style="color:var(--sub);font-size:12px;">joined '+fmtTime(p.created_at)+'</div></div>'
-      + '<div class="am">'+fmtDur(a.sec)+' · '+a.views+' views<br>last: '+fmtTime(p.last_seen)+'</div>'
-      + '<button class="ad-reset-btn" style="margin-left:8px;font-size:12px;padding:4px 10px;border-radius:8px;border:1px solid var(--line);background:transparent;color:var(--sub);cursor:pointer;" onclick="adminResetPw(\''+p.user_id+'\',\''+esc(p.staff_id||'this user')+'\')">Reset PW</button></div>';
-  }).join('') : '<div class="empty-note">No users yet.</div>';
+  AD_PROFILES = profs.data || []; AD_BYUSER = byUser;
+  renderAdUserRows(AD_PROFILES);
   var fb = await sb.from('b777_feedback').select('*').order('created_at',{ascending:false}).limit(50);
   var fbEl = document.getElementById('adFeedback');
   if(fb.error){ fbEl.innerHTML = '<div class="empty-note">'+esc(fb.error.message)+'</div>'; }
@@ -2433,7 +2467,7 @@ async function renderAdmin(){
 
 
 // ═══ Smart Version Check (auto-update, keeps offline working) ═══
-var APP_VERSION = '54';  // must match version.json — bump on every deploy
+var APP_VERSION = '55';  // must match version.json — bump on every deploy
 async function checkVersion(){
   // Only run online; offline we happily use the cached app.
   if(!navigator.onLine) return;
