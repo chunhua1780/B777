@@ -2423,8 +2423,11 @@ async function adminResetPw(userId, label){
   if(pw === null) return; // cancelled
   pw = pw.trim();
   if(pw && pw.length < 6){ alert('Password must be at least 6 characters.'); return; }
-  var body = { user_id: userId };
-  if(pw) body.new_password = pw;
+  // Leaving the prompt blank must actually reset to 123456 as promised above --
+  // omitting new_password here left the edge function generate a random
+  // password instead, so the admin would tell the user "123456" and it
+  // silently wouldn't work.
+  var body = { user_id: userId, new_password: pw || '123456' };
   var r = await sb.functions.invoke('admin-reset-password', { body: body });
   if(r.error || (r.data && r.data.error)){
     alert('Failed: ' + (r.error ? r.error.message : r.data.error));
@@ -2479,7 +2482,7 @@ async function renderAdmin(){
 
 
 // ═══ Smart Version Check (auto-update, keeps offline working) ═══
-var APP_VERSION = '56';  // must match version.json — bump on every deploy
+var APP_VERSION = '57';  // must match version.json — bump on every deploy
 async function checkVersion(){
   // Only run online; offline we happily use the cached app.
   if(!navigator.onLine) return;

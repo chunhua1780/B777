@@ -41,7 +41,18 @@ Deno.serve(async (req) => {
 
     const admin = createClient(url, serviceKey)
     const pw = (new_password && String(new_password).length >= 6) ? String(new_password) : genPassword()
-    const { error } = await admin.auth.admin.updateUserById(user_id, { password: pw })
+
+    // Flag the account so the app forces a password change on next sign-in
+    // (index.html's checkMustChangePassword/showPasswordModal). Fetch the
+    // current user_metadata and merge rather than overwrite it outright --
+    // updateUserById's merge semantics for user_metadata aren't something to
+    // rely on, and this field also carries staff_id, which the rest of the
+    // app depends on.
+    const { data: targetData, error: getErr } = await admin.auth.admin.getUserById(user_id)
+    if (getErr || !targetData?.user) return json({ error: 'User not found' }, 404)
+    const mergedMeta = { ...(targetData.user.user_metadata || {}), must_change_password: true }
+
+    const { error } = await admin.auth.admin.updateUserById(user_id, { password: pw, user_metadata: mergedMeta })
     if (error) return json({ error: error.message }, 400)
 
     return json({ ok: true, new_password: pw })
