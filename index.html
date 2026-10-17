@@ -952,7 +952,16 @@
   <div class="screen" id="custombank">
     <button class="back-link" onclick="show('home')">‹ Back</button>
     <div class="card">
-      <h2>📤 My Question Bank</h2>
+      <h2>📄 Step 1 — Extract text from a document</h2>
+      <p class="desc">Pulls the plain text out of a PDF or Word (.docx) file, entirely on this device — nothing is uploaded anywhere for this step. There's no automatic question-writing here (that needs an AI model and an API key this app doesn't have); copy the text out and turn it into questions yourself, or paste it into an AI chat and ask it to convert it to the JSON format below, then upload that JSON in Step 2. Old binary .doc files aren't supported — save as .docx or PDF first.</p>
+      <input class="auth-input" id="cbExtractFile" type="file" accept=".pdf,.docx" style="margin-bottom:8px;">
+      <div class="auth-msg" id="cbExtractMsg"></div>
+      <button class="big-btn secondary" onclick="extractDocText()">Extract text</button>
+      <textarea class="auth-input" id="cbExtractOut" readonly style="min-height:160px;margin-top:10px;display:none;font-family:ui-monospace,monospace;font-size:12px;" placeholder="Extracted text will appear here…"></textarea>
+      <button class="big-btn secondary" id="cbCopyBtn" style="display:none;margin-top:8px;" onclick="copyExtractedText()">Copy to clipboard</button>
+    </div>
+    <div class="card">
+      <h2>📤 Step 2 — Upload your question bank</h2>
       <p class="desc">Upload your own questions as a JSON file. It's stored under your account, practiced the same way as the rest of the app (chapters, random mix, due-for-review), and nobody else can see it.</p>
       <p class="desc" style="margin-top:0;font-size:12px;">Expected format — an array of objects:</p>
       <pre style="font-size:11px;background:var(--bg);border-radius:10px;padding:10px 12px;overflow-x:auto;white-space:pre;color:var(--sub);margin:0 0 12px;">[
@@ -1555,6 +1564,93 @@ async function clearCustomBank(){
   var uid = await myId(); if(!uid) return;
   await sb.from('b777_custom_bank').delete().eq('user_id', uid);
   loadCustomBank();
+}
+
+// ── Document text extraction (PDF/.docx -> plain text, client-side only) ──
+// No AI involved -- this app has no model API key configured, so there is
+// no automatic question-writing here. Libraries are lazy-loaded from a CDN
+// only when this screen is actually used, so the ~2MB of pdf.js/mammoth
+// never costs anything for the 99% of users who never open this page.
+function loadScriptOnce(src){
+  return new Promise(function(resolve, reject){
+    if(document.querySelector('script[src="'+src+'"]')){ resolve(); return; }
+    var s = document.createElement('script');
+    s.src = src;
+    s.onload = function(){ resolve(); };
+    s.onerror = function(){ reject(new Error('Failed to load ' + src)); };
+    document.head.appendChild(s);
+  });
+}
+var PDFJS_VER = '3.11.174', MAMMOTH_VER = '1.6.0';
+async function ensurePdfJs(){
+  if(window.pdfjsLib) return;
+  await loadScriptOnce('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/' + PDFJS_VER + '/pdf.min.js');
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/' + PDFJS_VER + '/pdf.worker.min.js';
+}
+async function ensureMammoth(){
+  if(window.mammoth) return;
+  await loadScriptOnce('https://cdnjs.cloudflare.com/ajax/libs/mammoth/' + MAMMOTH_VER + '/mammoth.browser.min.js');
+}
+async function extractDocText(){
+  var fileInput = document.getElementById('cbExtractFile');
+  var msg = document.getElementById('cbExtractMsg'); msg.className = 'auth-msg';
+  var out = document.getElementById('cbExtractOut');
+  var copyBtn = document.getElementById('cbCopyBtn');
+  out.style.display = 'none'; copyBtn.style.display = 'none'; out.value = '';
+  var file = fileInput.files && fileInput.files[0];
+  if(!file){ msg.className='auth-msg err'; msg.textContent='Choose a .pdf or .docx file first.'; return; }
+  if(file.size > 25*1024*1024){ msg.className='auth-msg err'; msg.textContent='File is too large (max 25 MB).'; return; }
+  var name = file.name.toLowerCase();
+  if(!navigator.onLine && !window.pdfjsLib && !window.mammoth){
+    msg.className='auth-msg err'; msg.textContent='First use needs an internet connection (to load the extraction library once).'; return;
+  }
+  msg.textContent = 'Extracting…';
+  try{
+    var text = '';
+    if(name.endsWith('.pdf')){
+      await ensurePdfJs();
+      var buf = await file.arrayBuffer();
+      var pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+      var pages = [];
+      for(var i=1;i<=pdf.numPages;i++){
+        var page = await pdf.getPage(i);
+        var content = await page.getTextContent();
+        pages.push(content.items.map(function(it){ return it.str; }).join(' '));
+      }
+      text = pages.join('\n\n');
+    } else if(name.endsWith('.docx')){
+      await ensureMammoth();
+      var buf2 = await file.arrayBuffer();
+      var r = await mammoth.extractRawText({ arrayBuffer: buf2 });
+      text = r.value || '';
+    } else {
+      msg.className='auth-msg err'; msg.textContent='Only .pdf and .docx are supported (not old .doc).'; return;
+    }
+    text = text.trim();
+    if(!text){ msg.className='auth-msg err'; msg.textContent='No extractable text found (the file may be scanned pages without OCR).'; return; }
+    out.value = text;
+    out.style.display = '';
+    copyBtn.style.display = '';
+    msg.className='auth-msg ok'; msg.textContent = 'Extracted ' + text.length + ' characters.';
+  }catch(e){
+    msg.className='auth-msg err'; msg.textContent = 'Could not extract text: ' + (e && e.message ? e.message : e);
+  }
+}
+function copyExtractedText(){
+  var out = document.getElementById('cbExtractOut');
+  var msg = document.getElementById('cbExtractMsg');
+  if(!out.value) return;
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(out.value).then(function(){
+      msg.className='auth-msg ok'; msg.textContent='Copied to clipboard.';
+    }).catch(function(){
+      out.focus(); out.select();
+      msg.className='auth-msg'; msg.textContent='Could not auto-copy — text is selected, copy manually.';
+    });
+  } else {
+    out.focus(); out.select();
+    msg.className='auth-msg'; msg.textContent='Text is selected — copy manually (Ctrl/Cmd+C).';
+  }
 }
 
 function practiceAllWrong(){
@@ -2771,7 +2867,7 @@ async function renderAdmin(){
 
 
 // ═══ Smart Version Check (auto-update, keeps offline working) ═══
-var APP_VERSION = '61';  // must match version.json — bump on every deploy
+var APP_VERSION = '62';  // must match version.json — bump on every deploy
 async function checkVersion(){
   // Only run online; offline we happily use the cached app.
   if(!navigator.onLine) return;
