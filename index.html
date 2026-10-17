@@ -637,6 +637,30 @@
       <div id="adUserList"><div class="empty-note">Loading…</div></div>
     </div>
     <div class="card">
+      <h2 style="font-size:16px;">➕ Add Questions</h2>
+      <p class="desc" style="margin-top:0;">Paste one question or dozens at once, in this format (blank line between questions, markdown bold is fine too):</p>
+      <pre style="font-size:11px;background:var(--bg);border-radius:10px;padding:10px 12px;overflow-x:auto;white-space:pre;color:var(--sub);margin:0 0 10px;">1. What is X?
+A. Option A
+B. Option B
+C. Option C
+D. Option D
+Answer: B</pre>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
+        <select class="auth-input" id="aqBank" style="flex:1;min-width:140px;margin-bottom:0;" onchange="document.getElementById('aqChapterRow').style.display = this.value==='gtk' ? '' : 'none';">
+          <option value="interview">Interview bank (面试题库)</option>
+          <option value="theory">Theory bank (理论题库)</option>
+          <option value="gtk">Good to Know</option>
+        </select>
+      </div>
+      <div id="aqChapterRow" style="display:none;">
+        <input class="auth-input" id="aqChapter" placeholder="Chapter name (e.g. Fuel System) — applies to all questions in this paste">
+      </div>
+      <textarea class="auth-input" id="aqText" style="min-height:160px;" placeholder="Paste one question, or dozens, in the format shown above…"></textarea>
+      <div class="auth-msg" id="aqMsg"></div>
+      <button class="big-btn" id="aqSubmitBtn" onclick="submitAdminQuestions()">Parse &amp; Add</button>
+      <div id="adQuestionsList" style="margin-top:12px;"></div>
+    </div>
+    <div class="card">
       <h2 style="font-size:16px;">Feedback 💡</h2>
       <div id="adFeedback"><div class="empty-note">Loading…</div></div>
     </div>
@@ -2199,6 +2223,7 @@ function enterApp(fresh){
     enforceDeviceLimit(fresh === true).then(function(ok){ if(ok) cloudPull(); startHeartbeat(); });
     touchProfile();
     checkMustChangePassword();
+    syncAdminQuestions();
   }
   setOfflineBadge();
   show('home'); renderHome();
@@ -2863,11 +2888,116 @@ async function renderAdmin(){
   else fbEl.innerHTML = (fb.data && fb.data.length) ? fb.data.map(function(f){
     return '<div class="comment"><div class="cm">'+esc(f.staff_id||'?')+' · '+fmtTime(f.created_at)+'</div><div class="ct">'+esc(f.text)+'</div></div>';
   }).join('') : '<div class="empty-note">No feedback yet.</div>';
+  loadAdminQuestionsList();
 }
 
+// ══ Admin-added questions: paste into the Interview/Theory/Good to Know
+// banks with no code deploy. Stored in b777_admin_questions (RLS: everyone
+// reads, only the real admin -- app_metadata.b777_admin -- writes/deletes).
+// Merged into QUESTIONS / GTK_QUESTIONS once per app session so every
+// existing filter/session function picks them up with no changes. ══
+function parsePastedQuestions(text){
+  var lines = String(text||'').split(/\r\n|\r|\n/);
+  var out = [], errors = [], cur = null;
+  function stripMd(s){ return s.replace(/\*\*/g,'').trim(); }
+  function flush(){
+    if(!cur) return;
+    var optCount = Object.keys(cur.options).length;
+    if(cur.question && optCount>=2 && cur.answer && cur.options[cur.answer]){
+      out.push(cur);
+    } else if(cur.question || optCount){
+      errors.push('Could not parse: "' + cur.question.slice(0,60) + (cur.question.length>60?'…':'') + '"');
+    }
+    cur = null;
+  }
+  for(var i=0;i<lines.length;i++){
+    var line = stripMd(lines[i]);
+    if(!line) continue;
+    var mAns = /^answer:?\s*([A-D])\b/i.exec(line);
+    if(mAns && cur){ cur.answer = mAns[1].toUpperCase(); continue; }
+    var mOpt = /^([A-D])[\.\)]\s*(.+)$/.exec(line);
+    if(mOpt && cur){ cur.options[mOpt[1].toUpperCase()] = mOpt[2].trim(); continue; }
+    flush();
+    cur = { question: line.replace(/^\d+[\.\)]\s*/, '').trim(), options: {}, answer: null };
+  }
+  flush();
+  return { questions: out, errors: errors };
+}
+async function submitAdminQuestions(){
+  var bank = document.getElementById('aqBank').value;
+  var chapter = document.getElementById('aqChapter').value.trim() || 'General';
+  var textEl = document.getElementById('aqText');
+  var msg = document.getElementById('aqMsg'); msg.className = 'auth-msg';
+  var parsed = parsePastedQuestions(textEl.value);
+  if(parsed.questions.length===0){ msg.className='auth-msg err'; msg.textContent='Nothing parsed — check the format against the example above.'; return; }
+  if(!navigator.onLine || !sb){ msg.className='auth-msg err'; msg.textContent='You need to be online to add questions.'; return; }
+  var uid = await myId();
+  var rows = parsed.questions.map(function(q){
+    return { bank: bank, chapter: bank==='gtk' ? chapter : null,
+              question: q.question, options: q.options, answer: q.answer,
+              created_by: uid };
+  });
+  var btn = document.getElementById('aqSubmitBtn'); btn.disabled = true; btn.textContent = 'Adding…';
+  var r = await sb.from('b777_admin_questions').insert(rows);
+  btn.disabled = false; btn.textContent = 'Parse & Add';
+  if(r.error){ msg.className='auth-msg err'; msg.textContent='Failed: '+r.error.message; return; }
+  var okMsg = 'Added ' + rows.length + ' question(s) to ' + (bank==='gtk'?'Good to Know':bank==='interview'?'the Interview bank':'the Theory bank') + '.';
+  if(parsed.errors.length) okMsg += ' (' + parsed.errors.length + ' line(s) could not be parsed and were skipped.)';
+  msg.className='auth-msg ok'; msg.textContent = okMsg;
+  textEl.value = '';
+  syncAdminQuestions();     // refresh the live pools so a practice session started right now sees them
+  loadAdminQuestionsList();
+}
+async function loadAdminQuestionsList(){
+  var el = document.getElementById('adQuestionsList');
+  if(!el) return;
+  if(!navigator.onLine || !sb){ el.innerHTML = ''; return; }
+  var r = await sb.from('b777_admin_questions').select('*').order('created_at',{ascending:false}).limit(20);
+  if(r.error || !r.data || !r.data.length){ el.innerHTML = ''; return; }
+  var bankLabel = { interview:'Interview', theory:'Theory', gtk:'Good to Know' };
+  el.innerHTML = '<div class="section-title" style="margin-bottom:6px;">Recently added (latest 20)</div>' + r.data.map(function(q){
+    return '<div class="wrong-item" style="margin-bottom:8px;"><div class="qid">'+esc(bankLabel[q.bank]||q.bank)+(q.chapter?' · '+esc(q.chapter):'')+'</div>'
+      + '<div class="qtext">'+escapeHtml(q.question)+'</div>'
+      + '<button class="ad-reset-btn" style="margin-top:6px;font-size:12px;padding:4px 10px;border-radius:8px;border:1px solid var(--line);background:transparent;color:var(--sub);cursor:pointer;" onclick="deleteAdminQuestion(\''+q.id+'\')">Delete</button></div>';
+  }).join('');
+}
+async function deleteAdminQuestion(id){
+  if(!confirm('Delete this question?')) return;
+  await sb.from('b777_admin_questions').delete().eq('id', id);
+  syncAdminQuestions();
+  loadAdminQuestionsList();
+}
+var ADMIN_Q_SYNCED = false;
+async function syncAdminQuestions(){
+  if(!navigator.onLine || !sb) return;
+  var r = await sb.from('b777_admin_questions').select('*');
+  if(r.error || !r.data) return;
+  // Re-sync is idempotent: drop any previously-merged admin rows (tagged
+  // below) before re-adding the current set, so edits/deletes on the
+  // server are reflected instead of just accumulating duplicates.
+  if(ADMIN_Q_SYNCED){
+    QUESTIONS = QUESTIONS.filter(function(q){ return !q._fromAdmin; });
+    GTK_QUESTIONS = GTK_QUESTIONS.filter(function(q){ return !q._fromAdmin; });
+  }
+  r.data.forEach(function(row){
+    var q = { id: 'admin-' + row.id, question: row.question, options: row.options,
+              answer: row.answer, reference: row.reference || '', _fromAdmin: true };
+    if(row.bank === 'gtk'){
+      q.chapter = row.chapter || 'General';
+      GTK_QUESTIONS.push(q);
+      if(!GTK_CHAPTERS.some(function(c){ return c.key===q.chapter; })){
+        GTK_CHAPTERS.push({ key: q.chapter, label: q.chapter });
+      }
+    } else {
+      q.category = (row.bank === 'theory') ? 'tech' : 'interview';
+      QUESTIONS.push(q);
+    }
+  });
+  ADMIN_Q_SYNCED = true;
+}
 
 // ═══ Smart Version Check (auto-update, keeps offline working) ═══
-var APP_VERSION = '62';  // must match version.json — bump on every deploy
+var APP_VERSION = '63';  // must match version.json — bump on every deploy
 async function checkVersion(){
   // Only run online; offline we happily use the cached app.
   if(!navigator.onLine) return;
