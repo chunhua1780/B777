@@ -460,6 +460,11 @@
         <div><div class="t">Good to Know</div><div class="d">General 777 systems knowledge, by chapter — spaced-repetition review</div></div>
         <div class="arrow">›</div>
       </button>
+      <button class="mode-btn wrongbank" id="customBankCard" style="display:none;" onclick="openCustomBank()">
+        <div class="ic">📤</div>
+        <div><div class="t">My Question Bank</div><div class="d">Upload your own questions (JSON) and practice them with spaced repetition</div></div>
+        <div class="arrow">›</div>
+      </button>
       <button class="mode-btn lounge" onclick="openForum()">
         <div class="ic">💬</div>
         <div><div class="t">Pilot Forum</div><div class="d">Open forum — post, reply, share pictures. Any nickname you like</div></div>
@@ -943,6 +948,33 @@
     <div id="gtkChapterList"></div>
   </div>
 
+  <!-- MY QUESTION BANK (self-uploaded, spaced-repetition) -->
+  <div class="screen" id="custombank">
+    <button class="back-link" onclick="show('home')">‹ Back</button>
+    <div class="card">
+      <h2>📤 My Question Bank</h2>
+      <p class="desc">Upload your own questions as a JSON file. It's stored under your account, practiced the same way as the rest of the app (chapters, random mix, due-for-review), and nobody else can see it.</p>
+      <p class="desc" style="margin-top:0;font-size:12px;">Expected format — an array of objects:</p>
+      <pre style="font-size:11px;background:var(--bg);border-radius:10px;padding:10px 12px;overflow-x:auto;white-space:pre;color:var(--sub);margin:0 0 12px;">[
+  { "chapter": "Fuel System",
+    "question": "...",
+    "options": {"A":"...","B":"...","C":"...","D":"..."},
+    "answer": "A",
+    "reference": "optional" }
+]</pre>
+      <input class="auth-input" id="cbFile" type="file" accept=".json,application/json" style="margin-bottom:8px;">
+      <div class="auth-msg" id="cbMsg"></div>
+      <button class="big-btn" onclick="uploadCustomBank()">Upload</button>
+    </div>
+    <div class="card" id="cbStatsCard" style="display:none;">
+      <p class="desc" id="cbStatsText" style="margin-top:0;"></p>
+      <button class="big-btn" id="cbDueBtn" onclick="startCustomDue()">Due for review</button>
+      <button class="big-btn secondary" onclick="startCustomRandom()">Random mix (all chapters)</button>
+      <button class="big-btn secondary" style="margin-top:8px;color:var(--bad,#e5484d);" onclick="clearCustomBank()">Delete my question bank</button>
+    </div>
+    <div id="cbChapterList"></div>
+  </div>
+
   <!-- UPGRADE -->
   <div class="screen" id="upgrade">
     <button class="back-link" onclick="show('home')">‹ Back</button>
@@ -1407,6 +1439,122 @@ function startGTKDue(){
 function startGTKRandom(){
   if(GTK_QUESTIONS.length===0) return;
   newSession('practice', true, 'gtk', pickRandom(GTK_QUESTIONS, Math.min(20, GTK_QUESTIONS.length)), 'Good to Know · Random Mix');
+}
+
+// ══ My Question Bank: user-uploaded JSON, admin-gated, same FSRS engine ══
+// Stored as one jsonb row per user in b777_custom_bank -- nobody but the
+// uploader can read their own row (RLS). Content and its provenance are
+// entirely the uploader's responsibility; the app just stores and quizzes it.
+var CUSTOM_QUESTIONS = [];
+var CUSTOM_CHAPTER_KEYS = [];
+function validateCustomBank(raw){
+  var arr;
+  try{ arr = JSON.parse(raw); }catch(e){ return { error: 'Not valid JSON: ' + e.message }; }
+  if(!Array.isArray(arr)) return { error: 'The file must contain a JSON array of question objects.' };
+  if(arr.length === 0) return { error: 'The file has no questions in it.' };
+  if(arr.length > 5000) return { error: 'Too many questions (max 5000 per upload).' };
+  var out = [];
+  for(var i=0;i<arr.length;i++){
+    var q = arr[i] || {};
+    var question = String(q.question || '').trim();
+    var opts = q.options || {};
+    var cleanOpts = {};
+    ['A','B','C','D'].forEach(function(k){ if(opts[k] && String(opts[k]).trim()) cleanOpts[k] = String(opts[k]).trim(); });
+    var answer = String(q.answer || '').trim().toUpperCase();
+    if(!question) return { error: 'Question ' + (i+1) + ' is missing "question" text.' };
+    if(Object.keys(cleanOpts).length < 2) return { error: 'Question ' + (i+1) + ' needs at least 2 non-empty options.' };
+    if(!cleanOpts[answer]) return { error: 'Question ' + (i+1) + ' has "answer":"' + answer + '" but no matching option.' };
+    out.push({
+      id: q.id ? String(q.id) : ('custom-' + i),
+      chapter: String(q.chapter || 'General').trim() || 'General',
+      question: question, options: cleanOpts, answer: answer,
+      reference: q.reference ? String(q.reference).trim() : ''
+    });
+  }
+  return { data: out };
+}
+async function uploadCustomBank(){
+  var fileInput = document.getElementById('cbFile');
+  var msg = document.getElementById('cbMsg'); msg.className = 'auth-msg';
+  var file = fileInput.files && fileInput.files[0];
+  if(!file){ msg.className='auth-msg err'; msg.textContent='Choose a .json file first.'; return; }
+  if(file.size > 8*1024*1024){ msg.className='auth-msg err'; msg.textContent='File is too large (max 8 MB).'; return; }
+  if(!navigator.onLine || !sb){ msg.className='auth-msg err'; msg.textContent='You need to be online to upload.'; return; }
+  var uid = await myId();
+  if(!uid){ msg.className='auth-msg err'; msg.textContent='Sign in required.'; return; }
+  var text;
+  try{ text = await file.text(); }catch(e){ msg.className='auth-msg err'; msg.textContent='Could not read the file.'; return; }
+  var v = validateCustomBank(text);
+  if(v.error){ msg.className='auth-msg err'; msg.textContent=v.error; return; }
+  var r = await sb.from('b777_custom_bank').upsert({ user_id: uid, questions: v.data, updated_at: new Date().toISOString() });
+  if(r.error){ msg.className='auth-msg err'; msg.textContent='Upload failed: '+r.error.message; return; }
+  msg.className='auth-msg ok'; msg.textContent='Uploaded ' + v.data.length + ' question(s).';
+  fileInput.value = '';
+  loadCustomBank();
+}
+async function loadCustomBank(){
+  CUSTOM_QUESTIONS = [];
+  if(navigator.onLine && sb){
+    var uid = await myId();
+    if(uid){
+      var r = await sb.from('b777_custom_bank').select('questions').eq('user_id', uid).maybeSingle();
+      if(!r.error && r.data && Array.isArray(r.data.questions)) CUSTOM_QUESTIONS = r.data.questions;
+    }
+  }
+  renderCustomBankUI();
+}
+function renderCustomBankUI(){
+  var statsCard = document.getElementById('cbStatsCard');
+  var chapterList = document.getElementById('cbChapterList');
+  if(CUSTOM_QUESTIONS.length === 0){
+    statsCard.style.display = 'none';
+    chapterList.innerHTML = '';
+    CUSTOM_CHAPTER_KEYS = [];
+    return;
+  }
+  statsCard.style.display = '';
+  var chapters = {};
+  CUSTOM_QUESTIONS.forEach(function(q){ chapters[q.chapter] = (chapters[q.chapter]||0) + 1; });
+  CUSTOM_CHAPTER_KEYS = Object.keys(chapters).sort();
+  document.getElementById('cbStatsText').textContent = CUSTOM_QUESTIONS.length + ' question(s) across ' + CUSTOM_CHAPTER_KEYS.length + ' chapter(s).';
+  var now = Date.now();
+  var dueTotal = CUSTOM_QUESTIONS.filter(function(q){ var c = CARDS[q.id]; return !c || c.seen===0 || c.due<=now; }).length;
+  var dueBtn = document.getElementById('cbDueBtn');
+  dueBtn.textContent = dueTotal>0 ? ('Due for review (' + dueTotal + ')') : 'Due for review';
+  dueBtn.disabled = dueTotal===0;
+  chapterList.innerHTML = CUSTOM_CHAPTER_KEYS.map(function(ch, idx){
+    var due = CUSTOM_QUESTIONS.filter(function(q){ if(q.chapter!==ch) return false; var c = CARDS[q.id]; return !c || c.seen===0 || c.due<=now; }).length;
+    return '<button class="post-item" onclick="startCustomChapterIdx('+idx+')"><div class="pt">'+escapeHtml(ch)+'</div><div class="pm">'+chapters[ch]+' questions · '+due+' due for review</div></button>';
+  }).join('');
+}
+function openCustomBank(){
+  show('custombank');
+  document.getElementById('cbMsg').className = 'auth-msg';
+  loadCustomBank();
+}
+function startCustomChapterIdx(idx){
+  var ch = CUSTOM_CHAPTER_KEYS[idx];
+  if(ch===undefined) return;
+  var pool = CUSTOM_QUESTIONS.filter(function(q){ return q.chapter===ch; });
+  if(pool.length===0) return;
+  newSession('practice', true, 'custom', pickForReview(pool, pool.length), 'My Question Bank · ' + ch);
+}
+function startCustomDue(){
+  var now = Date.now();
+  var pool = CUSTOM_QUESTIONS.filter(function(q){ var c = CARDS[q.id]; return !c || c.seen===0 || c.due<=now; });
+  if(pool.length===0) return;
+  newSession('practice', true, 'custom', pickForReview(pool, pool.length), 'My Question Bank · Due Review');
+}
+function startCustomRandom(){
+  if(CUSTOM_QUESTIONS.length===0) return;
+  newSession('practice', true, 'custom', pickRandom(CUSTOM_QUESTIONS, Math.min(20, CUSTOM_QUESTIONS.length)), 'My Question Bank · Random Mix');
+}
+async function clearCustomBank(){
+  if(!confirm('Delete your uploaded question bank? This cannot be undone.')) return;
+  if(!navigator.onLine || !sb) return;
+  var uid = await myId(); if(!uid) return;
+  await sb.from('b777_custom_bank').delete().eq('user_id', uid);
+  loadCustomBank();
 }
 
 function practiceAllWrong(){
@@ -1924,12 +2072,14 @@ async function signOut(){
 }
 function applyRoles(staff, isAdmin){
   if(isAdmin){ var a = document.getElementById('adminCard'); if(a) a.style.display = ''; }
-  // Duty Manager, Flight Calculator, Manual Reader, and Good to Know are restricted to a single admin account.
+  // Duty Manager, Flight Calculator, Manual Reader, Good to Know, and My
+  // Question Bank are restricted to a single admin account.
   if(String(staff) === '467988'){
     var cc = document.getElementById('calcCard'); if(cc) cc.style.display = '';
     var dc = document.getElementById('dutyManagerCard'); if(dc) dc.style.display = '';
     var mc = document.getElementById('manualReaderCard'); if(mc) mc.style.display = '';
     var gc = document.getElementById('gtkCard'); if(gc) gc.style.display = '';
+    var ub = document.getElementById('customBankCard'); if(ub) ub.style.display = '';
   }
 }
 // Offline we have no profile row to read, so drive the same UI off the local pass.
@@ -2621,7 +2771,7 @@ async function renderAdmin(){
 
 
 // ═══ Smart Version Check (auto-update, keeps offline working) ═══
-var APP_VERSION = '60';  // must match version.json — bump on every deploy
+var APP_VERSION = '61';  // must match version.json — bump on every deploy
 async function checkVersion(){
   // Only run online; offline we happily use the cached app.
   if(!navigator.onLine) return;
