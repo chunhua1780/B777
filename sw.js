@@ -1,5 +1,5 @@
-const CACHE = 'b777-v58';
-const ASSETS = ['./', './index.html', './questions.js', './supabase.js', './manifest.json', './icon192.png', './icon512.png', './icon-maskable.png', './duty-manager.html', './manual-reader.html'];
+const CACHE = 'b777-v59';
+const ASSETS = ['./', './index.html', './questions.js', './gotoknow.js', './supabase.js', './manifest.json', './icon192.png', './icon512.png', './icon-maskable.png', './duty-manager.html', './manual-reader.html'];
 const PAGES = ['./index.html', './duty-manager.html', './manual-reader.html'];
 
 self.addEventListener('install', function(e){
