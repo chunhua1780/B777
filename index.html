@@ -636,6 +636,8 @@
       <input class="auth-input" id="adUserSearch" type="search" placeholder="Search by staff ID…" style="margin-bottom:10px;" oninput="searchAdUsers(this.value)">
       <div id="adUserList"><div class="empty-note">Loading…</div></div>
     </div>
+    <button class="big-btn secondary" id="qmgmtToggleBtn" style="margin:4px 0 10px;" onclick="toggleQuestionMgmt()">📝 Question Management ▸</button>
+    <div id="qmgmtBody" style="display:none;">
     <div class="card">
       <h2 style="font-size:16px;">➕ Add Questions</h2>
       <p class="desc" style="margin-top:0;">Paste one question or dozens at once, in this format (blank line between questions, markdown bold is fine too):</p>
@@ -687,6 +689,7 @@ Answer: B</pre>
       </div>
       <div id="mqResults"></div>
       <p class="desc" id="mqMore" style="font-size:12px;"></p>
+    </div>
     </div>
     <div class="card">
       <h2 style="font-size:16px;">Feedback 💡</h2>
@@ -2830,8 +2833,16 @@ function openAdmin(){
   var s = document.getElementById('adUserSearch'); if(s) s.value = '';
   var ms = document.getElementById('mqSearch'); if(ms) ms.value = '';
   cancelManageQuestionEdit();
+  document.getElementById('qmgmtBody').style.display = 'none';
+  document.getElementById('qmgmtToggleBtn').textContent = '📝 Question Management ▸';
   show('admin'); renderAdmin();
   syncAdminQuestions().then(renderManageQuestions);
+}
+function toggleQuestionMgmt(){
+  var body = document.getElementById('qmgmtBody');
+  var open = body.style.display !== 'none';
+  body.style.display = open ? 'none' : '';
+  document.getElementById('qmgmtToggleBtn').textContent = '📝 Question Management ' + (open ? '▸' : '▾');
 }
 // Cached from the last renderAdmin() fetch, so clearing the search box
 // re-shows the full list without re-hitting the network.
@@ -3156,7 +3167,7 @@ async function deleteAnyQuestion(id){
 }
 
 // ═══ Smart Version Check (auto-update, keeps offline working) ═══
-var APP_VERSION = '64';  // must match version.json — bump on every deploy
+var APP_VERSION = '65';  // must match version.json — bump on every deploy
 async function checkVersion(){
   // Only run online; offline we happily use the cached app.
   if(!navigator.onLine) return;
