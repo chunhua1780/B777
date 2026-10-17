@@ -661,6 +661,34 @@ Answer: B</pre>
       <div id="adQuestionsList" style="margin-top:12px;"></div>
     </div>
     <div class="card">
+      <h2 style="font-size:16px;">🗂 Manage All Questions</h2>
+      <p class="desc" style="margin-top:0;">Edit or delete any question in any bank — Interview, Theory, or Good to Know — including the original built-in ones.</p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
+        <select class="auth-input" id="mqBank" style="flex:1;min-width:120px;margin-bottom:0;" onchange="renderManageQuestions()">
+          <option value="all">All banks</option>
+          <option value="interview">Interview</option>
+          <option value="theory">Theory</option>
+          <option value="gtk">Good to Know</option>
+        </select>
+        <input class="auth-input" id="mqSearch" placeholder="Search question text…" style="flex:2;min-width:160px;margin-bottom:0;" oninput="renderManageQuestions()">
+      </div>
+      <div id="mqEditPanel" style="display:none;background:var(--bg);border-radius:12px;padding:12px;margin-bottom:10px;">
+        <div style="font-size:12px;color:var(--sub);margin-bottom:6px;">Editing <span id="mqEditId"></span></div>
+        <textarea class="auth-input" id="mqEQuestion" placeholder="Question text" style="min-height:60px;"></textarea>
+        <input class="auth-input" id="mqEOptA" placeholder="Option A">
+        <input class="auth-input" id="mqEOptB" placeholder="Option B">
+        <input class="auth-input" id="mqEOptC" placeholder="Option C">
+        <input class="auth-input" id="mqEOptD" placeholder="Option D">
+        <input class="auth-input" id="mqEAnswer" placeholder="Answer (A/B/C/D)" maxlength="1" style="text-transform:uppercase;">
+        <input class="auth-input" id="mqERef" placeholder="Reference (optional)">
+        <div class="auth-msg" id="mqEMsg"></div>
+        <button class="big-btn" onclick="saveManageQuestionEdit()">Save</button>
+        <button class="big-btn secondary" onclick="cancelManageQuestionEdit()">Cancel</button>
+      </div>
+      <div id="mqResults"></div>
+      <p class="desc" id="mqMore" style="font-size:12px;"></p>
+    </div>
+    <div class="card">
       <h2 style="font-size:16px;">Feedback 💡</h2>
       <div id="adFeedback"><div class="empty-note">Loading…</div></div>
     </div>
@@ -1037,6 +1065,14 @@ Answer: B</pre>
 <script src="questions.js"></script>
 <script src="gotoknow.js"></script>
 <script>
+// Pristine snapshots of the static content (questions.js / gotoknow.js),
+// taken before anything ever mutates QUESTIONS/GTK_QUESTIONS/GTK_CHAPTERS.
+// syncAdminQuestions() rebuilds from these every time it runs, so admin
+// edits/deletes/additions never accumulate drift across repeated syncs.
+var QUESTIONS_BASE = QUESTIONS.slice();
+var GTK_QUESTIONS_BASE = GTK_QUESTIONS.slice();
+var GTK_CHAPTERS_BASE = GTK_CHAPTERS.slice();
+
 // ══════════════════════════════════════════════════════════════
 // Categories
 // ══════════════════════════════════════════════════════════════
@@ -2792,7 +2828,10 @@ function fmtDur(sec){
 }
 function openAdmin(){
   var s = document.getElementById('adUserSearch'); if(s) s.value = '';
+  var ms = document.getElementById('mqSearch'); if(ms) ms.value = '';
+  cancelManageQuestionEdit();
   show('admin'); renderAdmin();
+  syncAdminQuestions().then(renderManageQuestions);
 }
 // Cached from the last renderAdmin() fetch, so clearing the search box
 // re-shows the full list without re-hitting the network.
@@ -2967,19 +3006,23 @@ async function deleteAdminQuestion(id){
   syncAdminQuestions();
   loadAdminQuestionsList();
 }
-var ADMIN_Q_SYNCED = false;
+// Rebuilds QUESTIONS/GTK_QUESTIONS/GTK_CHAPTERS from the pristine *_BASE
+// snapshots every time, then layers admin additions and overrides back on
+// top -- so repeated syncs (after an edit/delete, or a fresh login) never
+// accumulate drift, they just reflect the server's current state.
 async function syncAdminQuestions(){
   if(!navigator.onLine || !sb) return;
-  var r = await sb.from('b777_admin_questions').select('*');
-  if(r.error || !r.data) return;
-  // Re-sync is idempotent: drop any previously-merged admin rows (tagged
-  // below) before re-adding the current set, so edits/deletes on the
-  // server are reflected instead of just accumulating duplicates.
-  if(ADMIN_Q_SYNCED){
-    QUESTIONS = QUESTIONS.filter(function(q){ return !q._fromAdmin; });
-    GTK_QUESTIONS = GTK_QUESTIONS.filter(function(q){ return !q._fromAdmin; });
-  }
-  r.data.forEach(function(row){
+  var addedR = await sb.from('b777_admin_questions').select('*');
+  var overR = await sb.from('b777_question_overrides').select('*');
+  if(addedR.error || !addedR.data) return;
+  var overrides = {};
+  if(!overR.error && overR.data) overR.data.forEach(function(o){ overrides[o.id] = o; });
+
+  QUESTIONS = QUESTIONS_BASE.slice();
+  GTK_QUESTIONS = GTK_QUESTIONS_BASE.slice();
+  GTK_CHAPTERS = GTK_CHAPTERS_BASE.slice();
+
+  addedR.data.forEach(function(row){
     var q = { id: 'admin-' + row.id, question: row.question, options: row.options,
               answer: row.answer, reference: row.reference || '', _fromAdmin: true };
     if(row.bank === 'gtk'){
@@ -2993,11 +3036,127 @@ async function syncAdminQuestions(){
       QUESTIONS.push(q);
     }
   });
-  ADMIN_Q_SYNCED = true;
+
+  function applyOverrides(arr){
+    var out = [];
+    arr.forEach(function(q){
+      var o = overrides[q.id];
+      if(!o) { out.push(q); return; }
+      if(o.deleted) return;                 // dropped from the pool entirely
+      var patched = {};
+      for(var k in q) patched[k] = q[k];
+      patched.question = o.question || q.question;
+      patched.options = o.options || q.options;
+      patched.answer = o.answer || q.answer;
+      patched.reference = (o.reference != null) ? o.reference : q.reference;
+      out.push(patched);
+    });
+    return out;
+  }
+  // Only static-origin questions (not admin-added ones -- those are edited/
+  // deleted by writing straight to their own row, never via an override).
+  QUESTIONS = applyOverrides(QUESTIONS);
+  GTK_QUESTIONS = applyOverrides(GTK_QUESTIONS);
+}
+
+// ══ Manage All Questions: edit or delete any question, static or
+// admin-added, across every bank. Static-origin edits/deletes are stored
+// as override rows (b777_question_overrides); admin-added ones are edited
+// or deleted on their own row directly. ══
+function findQuestionById(id){
+  return QUESTIONS.find(function(q){ return q.id===id; }) || GTK_QUESTIONS.find(function(q){ return q.id===id; });
+}
+function manageQuestionsPool(bank){
+  if(bank==='interview') return QUESTIONS.filter(function(q){ return q.category==='interview'||q.category==='both'; });
+  if(bank==='theory') return QUESTIONS.filter(function(q){ return q.category==='tech'||q.category==='both'; });
+  if(bank==='gtk') return GTK_QUESTIONS;
+  return QUESTIONS.concat(GTK_QUESTIONS);
+}
+function renderManageQuestions(){
+  var listEl = document.getElementById('mqResults');
+  if(!listEl) return;
+  var bank = document.getElementById('mqBank').value;
+  var term = document.getElementById('mqSearch').value.trim().toLowerCase();
+  var pool = manageQuestionsPool(bank);
+  var filtered = term ? pool.filter(function(q){ return q.question.toLowerCase().indexOf(term)>=0; }) : pool;
+  var shown = filtered.slice(0, 50);
+  listEl.innerHTML = shown.length ? shown.map(function(q){
+    return '<div class="wrong-item" style="margin-bottom:8px;"><div class="qid">'+esc(q.id)+(q._fromAdmin?' · admin-added':'')+'</div>'
+      + '<div class="qtext">'+escapeHtml(q.question)+'</div>'
+      + '<div class="line good">Answer: '+esc(q.answer)+'. '+escapeHtml(q.options[q.answer]||'')+'</div>'
+      + '<div style="display:flex;gap:8px;margin-top:6px;">'
+      + '<button class="ad-reset-btn" style="font-size:12px;padding:4px 10px;border-radius:8px;border:1px solid var(--line);background:transparent;color:var(--sub);cursor:pointer;" onclick="startEditQuestion(\''+q.id+'\')">Edit</button>'
+      + '<button class="ad-reset-btn" style="font-size:12px;padding:4px 10px;border-radius:8px;border:1px solid var(--bad,#e5484d);background:transparent;color:var(--bad,#e5484d);cursor:pointer;" onclick="deleteAnyQuestion(\''+q.id+'\')">Delete</button>'
+      + '</div></div>';
+  }).join('') : '<div class="empty-note">No matches.</div>';
+  document.getElementById('mqMore').textContent = filtered.length>50
+    ? ('Showing 50 of ' + filtered.length + ' — narrow your search to see the rest.')
+    : (filtered.length + ' question(s).');
+}
+var MQ_EDIT_ID = null;
+function startEditQuestion(id){
+  var q = findQuestionById(id); if(!q) return;
+  MQ_EDIT_ID = id;
+  document.getElementById('mqEditId').textContent = id;
+  document.getElementById('mqEQuestion').value = q.question;
+  document.getElementById('mqEOptA').value = q.options.A || '';
+  document.getElementById('mqEOptB').value = q.options.B || '';
+  document.getElementById('mqEOptC').value = q.options.C || '';
+  document.getElementById('mqEOptD').value = q.options.D || '';
+  document.getElementById('mqEAnswer').value = q.answer || '';
+  document.getElementById('mqERef').value = q.reference || '';
+  document.getElementById('mqEMsg').className = 'auth-msg'; document.getElementById('mqEMsg').textContent = '';
+  var panel = document.getElementById('mqEditPanel');
+  panel.style.display = '';
+  panel.scrollIntoView({ behavior:'smooth', block:'start' });
+}
+function cancelManageQuestionEdit(){
+  MQ_EDIT_ID = null;
+  document.getElementById('mqEditPanel').style.display = 'none';
+}
+async function saveManageQuestionEdit(){
+  if(!MQ_EDIT_ID) return;
+  var msg = document.getElementById('mqEMsg'); msg.className = 'auth-msg';
+  var question = document.getElementById('mqEQuestion').value.trim();
+  var rawOpts = { A: document.getElementById('mqEOptA').value.trim(), B: document.getElementById('mqEOptB').value.trim(),
+                  C: document.getElementById('mqEOptC').value.trim(), D: document.getElementById('mqEOptD').value.trim() };
+  var answer = document.getElementById('mqEAnswer').value.trim().toUpperCase();
+  var reference = document.getElementById('mqERef').value.trim();
+  var cleanOpts = {}; ['A','B','C','D'].forEach(function(k){ if(rawOpts[k]) cleanOpts[k] = rawOpts[k]; });
+  if(!question){ msg.className='auth-msg err'; msg.textContent='Question text is required.'; return; }
+  if(Object.keys(cleanOpts).length<2){ msg.className='auth-msg err'; msg.textContent='Need at least 2 options.'; return; }
+  if(!cleanOpts[answer]){ msg.className='auth-msg err'; msg.textContent='Answer must match one of the filled-in options.'; return; }
+  if(!navigator.onLine || !sb){ msg.className='auth-msg err'; msg.textContent='You need to be online.'; return; }
+  var id = MQ_EDIT_ID, r;
+  if(id.indexOf('admin-')===0){
+    r = await sb.from('b777_admin_questions').update({ question: question, options: cleanOpts, answer: answer, reference: reference || null }).eq('id', id.slice('admin-'.length));
+  } else {
+    var uid = await myId();
+    r = await sb.from('b777_question_overrides').upsert({ id: id, deleted: false, question: question, options: cleanOpts, answer: answer, reference: reference || null, updated_by: uid, updated_at: new Date().toISOString() });
+  }
+  if(r.error){ msg.className='auth-msg err'; msg.textContent='Save failed: '+r.error.message; return; }
+  msg.className='auth-msg ok'; msg.textContent='Saved.';
+  await syncAdminQuestions();
+  renderManageQuestions();
+  setTimeout(cancelManageQuestionEdit, 600);
+}
+async function deleteAnyQuestion(id){
+  if(!confirm('Delete this question from the question bank? This cannot be undone.')) return;
+  if(!navigator.onLine || !sb) return;
+  var r;
+  if(id.indexOf('admin-')===0){
+    r = await sb.from('b777_admin_questions').delete().eq('id', id.slice('admin-'.length));
+  } else {
+    var uid = await myId();
+    r = await sb.from('b777_question_overrides').upsert({ id: id, deleted: true, updated_by: uid, updated_at: new Date().toISOString() });
+  }
+  if(r.error){ alert('Delete failed: '+r.error.message); return; }
+  await syncAdminQuestions();
+  renderManageQuestions();
 }
 
 // ═══ Smart Version Check (auto-update, keeps offline working) ═══
-var APP_VERSION = '63';  // must match version.json — bump on every deploy
+var APP_VERSION = '64';  // must match version.json — bump on every deploy
 async function checkVersion(){
   // Only run online; offline we happily use the cached app.
   if(!navigator.onLine) return;
