@@ -647,6 +647,16 @@ B. Option B
 C. Option C
 D. Option D
 Answer: B</pre>
+      <p class="desc" style="margin-top:0;font-size:12px;">For Good to Know, a whole multi-chapter paste in one go also works — put a <b>## Chapter Name</b> heading line before each section's questions and they're split into their chapters automatically:</p>
+      <pre style="font-size:11px;background:var(--bg);border-radius:10px;padding:10px 12px;overflow-x:auto;white-space:pre;color:var(--sub);margin:0 0 10px;">## Fuel System
+1. What is X?
+A. ...  B. ...  C. ...  D. ...
+Answer: A
+
+## Hydraulics
+2. What is Y?
+A. ...  B. ...  C. ...  D. ...
+Answer: C</pre>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
         <select class="auth-input" id="aqBank" style="flex:1;min-width:140px;margin-bottom:0;" onchange="document.getElementById('aqChapterRow').style.display = this.value==='gtk' ? '' : 'none';">
           <option value="interview">Interview bank (面试题库)</option>
@@ -655,7 +665,7 @@ Answer: B</pre>
         </select>
       </div>
       <div id="aqChapterRow" style="display:none;">
-        <input class="auth-input" id="aqChapter" placeholder="Chapter name (e.g. Fuel System) — applies to all questions in this paste">
+        <input class="auth-input" id="aqChapter" placeholder="Fallback chapter name — only used for questions with no ## heading above them">
       </div>
       <textarea class="auth-input" id="aqText" style="min-height:160px;" placeholder="Paste one question, or dozens, in the format shown above…"></textarea>
       <div class="auth-msg" id="aqMsg"></div>
@@ -2948,7 +2958,7 @@ async function renderAdmin(){
 // existing filter/session function picks them up with no changes. ══
 function parsePastedQuestions(text){
   var lines = String(text||'').split(/\r\n|\r|\n/);
-  var out = [], errors = [], cur = null;
+  var out = [], errors = [], cur = null, chapter = null;
   function stripMd(s){ return s.replace(/\*\*/g,'').trim(); }
   function flush(){
     if(!cur) return;
@@ -2961,29 +2971,43 @@ function parsePastedQuestions(text){
     cur = null;
   }
   for(var i=0;i<lines.length;i++){
-    var line = stripMd(lines[i]);
+    var trimmed = lines[i].trim();
+    if(!trimmed) continue;
+    // Markdown headings ("## 3. Autoflight") mark the start of a new chapter --
+    // everything after it (until the next heading) is tagged with that name.
+    // A question line never starts with "#", so this is unambiguous and
+    // lets one long multi-chapter paste auto-split by chapter instead of
+    // needing one paste per chapter.
+    var mHead = /^#{1,6}\s*(?:\d+[\.\)]\s*)?(.+?)\s*#*$/.exec(trimmed);
+    if(mHead){ flush(); chapter = mHead[1].trim(); continue; }
+    var line = stripMd(trimmed);
     if(!line) continue;
     var mAns = /^answer:?\s*([A-D])\b/i.exec(line);
     if(mAns && cur){ cur.answer = mAns[1].toUpperCase(); continue; }
     var mOpt = /^([A-D])[\.\)]\s*(.+)$/.exec(line);
     if(mOpt && cur){ cur.options[mOpt[1].toUpperCase()] = mOpt[2].trim(); continue; }
     flush();
-    cur = { question: line.replace(/^\d+[\.\)]\s*/, '').trim(), options: {}, answer: null };
+    cur = { question: line.replace(/^\d+[\.\)]\s*/, '').trim(), options: {}, answer: null, chapter: chapter };
   }
   flush();
   return { questions: out, errors: errors };
 }
 async function submitAdminQuestions(){
   var bank = document.getElementById('aqBank').value;
-  var chapter = document.getElementById('aqChapter').value.trim() || 'General';
+  var manualChapter = document.getElementById('aqChapter').value.trim();
   var textEl = document.getElementById('aqText');
   var msg = document.getElementById('aqMsg'); msg.className = 'auth-msg';
   var parsed = parsePastedQuestions(textEl.value);
   if(parsed.questions.length===0){ msg.className='auth-msg err'; msg.textContent='Nothing parsed — check the format against the example above.'; return; }
   if(!navigator.onLine || !sb){ msg.className='auth-msg err'; msg.textContent='You need to be online to add questions.'; return; }
   var uid = await myId();
+  var chaptersSeen = {};
   var rows = parsed.questions.map(function(q){
-    return { bank: bank, chapter: bank==='gtk' ? chapter : null,
+    // Per-question chapter comes from a "## Heading" line in the paste, if
+    // any were found; otherwise fall back to the single Chapter field.
+    var ch = bank==='gtk' ? (q.chapter || manualChapter || 'General') : null;
+    if(ch) chaptersSeen[ch] = true;
+    return { bank: bank, chapter: ch,
               question: q.question, options: q.options, answer: q.answer,
               created_by: uid };
   });
@@ -2992,6 +3016,10 @@ async function submitAdminQuestions(){
   btn.disabled = false; btn.textContent = 'Parse & Add';
   if(r.error){ msg.className='auth-msg err'; msg.textContent='Failed: '+r.error.message; return; }
   var okMsg = 'Added ' + rows.length + ' question(s) to ' + (bank==='gtk'?'Good to Know':bank==='interview'?'the Interview bank':'the Theory bank') + '.';
+  if(bank==='gtk'){
+    var chList = Object.keys(chaptersSeen);
+    if(chList.length>1) okMsg += ' Split across ' + chList.length + ' chapters (' + chList.join(', ') + ').';
+  }
   if(parsed.errors.length) okMsg += ' (' + parsed.errors.length + ' line(s) could not be parsed and were skipped.)';
   msg.className='auth-msg ok'; msg.textContent = okMsg;
   textEl.value = '';
@@ -3167,7 +3195,7 @@ async function deleteAnyQuestion(id){
 }
 
 // ═══ Smart Version Check (auto-update, keeps offline working) ═══
-var APP_VERSION = '65';  // must match version.json — bump on every deploy
+var APP_VERSION = '66';  // must match version.json — bump on every deploy
 async function checkVersion(){
   // Only run online; offline we happily use the cached app.
   if(!navigator.onLine) return;
