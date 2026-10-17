@@ -1,4 +1,4 @@
-// "Go to Know" — original, general 777 systems-knowledge questions.
+// "Good to Know" — original, general 777 systems-knowledge questions.
 // Not derived from any third-party study guide or copyrighted book: these
 // are general, publicly-documented facts about the 777 airframe, written
 // from scratch. They're a general-knowledge primer, not a substitute for

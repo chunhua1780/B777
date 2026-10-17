@@ -455,9 +455,9 @@
         <div><div class="t">Recently Tested</div><div class="d">Questions the community flagged as seen on a recent real exam</div></div>
         <div class="arrow">›</div>
       </button>
-      <button class="mode-btn wrongbank" onclick="openGotoKnow()">
+      <button class="mode-btn wrongbank" id="gtkCard" style="display:none;" onclick="openGotoKnow()">
         <div class="ic">📘</div>
-        <div><div class="t">Go to Know</div><div class="d">General 777 systems knowledge, by chapter — spaced-repetition review</div></div>
+        <div><div class="t">Good to Know</div><div class="d">General 777 systems knowledge, by chapter — spaced-repetition review</div></div>
         <div class="arrow">›</div>
       </button>
       <button class="mode-btn lounge" onclick="openForum()">
@@ -935,7 +935,7 @@
   <div class="screen" id="gotoknow">
     <button class="back-link" onclick="show('home')">‹ Back</button>
     <div class="card">
-      <h2>📘 Go to Know</h2>
+      <h2>📘 Good to Know</h2>
       <p class="desc">General 777 systems knowledge, by chapter. This is a general-knowledge primer, not your company's manuals — your own OM/FCOM/QRH always wins if anything here ever looks different.</p>
       <button class="big-btn" id="gtkDueBtn" onclick="startGTKDue()">Due for review</button>
       <button class="big-btn secondary" onclick="startGTKRandom()">Random mix (all chapters)</button>
@@ -1375,7 +1375,7 @@ function startDueReview(){
   newSession('review', true, 'all', list, 'Due Review');
 }
 
-// ══ Go to Know: general 777 systems knowledge, same FSRS engine as the
+// ══ Good to Know: general 777 systems knowledge, same FSRS engine as the
 // main bank (CARDS is keyed by id, and gtk- ids never collide with it) ══
 function openGotoKnow(){
   var el = document.getElementById('gtkChapterList');
@@ -1396,17 +1396,17 @@ function startGTKChapter(key){
   var ch = GTK_CHAPTERS.find(function(c){ return c.key===key; });
   var pool = GTK_QUESTIONS.filter(function(q){ return q.chapter===key; });
   if(pool.length===0) return;
-  newSession('practice', true, 'gtk', pickForReview(pool, pool.length), 'Go to Know · ' + (ch ? ch.label : key));
+  newSession('practice', true, 'gtk', pickForReview(pool, pool.length), 'Good to Know · ' + (ch ? ch.label : key));
 }
 function startGTKDue(){
   var now = Date.now();
   var pool = GTK_QUESTIONS.filter(function(q){ var c = CARDS[q.id]; return !c || c.seen===0 || c.due<=now; });
   if(pool.length===0) return;
-  newSession('practice', true, 'gtk', pickForReview(pool, pool.length), 'Go to Know · Due Review');
+  newSession('practice', true, 'gtk', pickForReview(pool, pool.length), 'Good to Know · Due Review');
 }
 function startGTKRandom(){
   if(GTK_QUESTIONS.length===0) return;
-  newSession('practice', true, 'gtk', pickRandom(GTK_QUESTIONS, Math.min(20, GTK_QUESTIONS.length)), 'Go to Know · Random Mix');
+  newSession('practice', true, 'gtk', pickRandom(GTK_QUESTIONS, Math.min(20, GTK_QUESTIONS.length)), 'Good to Know · Random Mix');
 }
 
 function practiceAllWrong(){
@@ -1924,11 +1924,12 @@ async function signOut(){
 }
 function applyRoles(staff, isAdmin){
   if(isAdmin){ var a = document.getElementById('adminCard'); if(a) a.style.display = ''; }
-  // Duty Manager, Flight Calculator and Manual Reader are restricted to a single admin account.
+  // Duty Manager, Flight Calculator, Manual Reader, and Good to Know are restricted to a single admin account.
   if(String(staff) === '467988'){
     var cc = document.getElementById('calcCard'); if(cc) cc.style.display = '';
     var dc = document.getElementById('dutyManagerCard'); if(dc) dc.style.display = '';
     var mc = document.getElementById('manualReaderCard'); if(mc) mc.style.display = '';
+    var gc = document.getElementById('gtkCard'); if(gc) gc.style.display = '';
   }
 }
 // Offline we have no profile row to read, so drive the same UI off the local pass.
@@ -2620,7 +2621,7 @@ async function renderAdmin(){
 
 
 // ═══ Smart Version Check (auto-update, keeps offline working) ═══
-var APP_VERSION = '59';  // must match version.json — bump on every deploy
+var APP_VERSION = '60';  // must match version.json — bump on every deploy
 async function checkVersion(){
   // Only run online; offline we happily use the cached app.
   if(!navigator.onLine) return;
