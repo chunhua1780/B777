@@ -450,6 +450,11 @@
         <div><div class="t">Mistake Bank</div><div class="d" id="wrongBankDesc">Drill the questions you keep getting wrong</div></div>
         <div class="arrow">›</div>
       </button>
+      <button class="mode-btn wrongbank" onclick="openHotExam()">
+        <div class="ic">🔥</div>
+        <div><div class="t">Recently Tested</div><div class="d">Questions the community flagged as seen on a recent real exam</div></div>
+        <div class="arrow">›</div>
+      </button>
       <button class="mode-btn lounge" onclick="openForum()">
         <div class="ic">💬</div>
         <div><div class="t">Pilot Forum</div><div class="d">Open forum — post, reply, share pictures. Any nickname you like</div></div>
@@ -858,6 +863,10 @@
           </div>
           <div class="q-text" id="qText">…</div>
           <div id="ansList"></div>
+          <div class="ref-box" id="examFlagBox" style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
+            <div style="font-size:12.5px;color:var(--sub);" id="examFlagCount">🔥 …</div>
+            <button class="flag-btn" id="examFlagBtn" style="padding:7px 12px;" onclick="toggleExamFlag()" disabled>Mark: seen on a recent exam</button>
+          </div>
           <div class="ref-box" id="refBox"></div>
           <div class="ref-box" id="qNotesBox">
             <b>Notes &amp; Sources</b>
@@ -905,6 +914,16 @@
       <button class="big-btn" id="practiceWrongBtn" onclick="practiceAllWrong()">Start Review</button>
     </div>
     <div id="wrongBankList" class="wrong-list-grid"></div>
+  </div>
+
+  <!-- HOT EXAM (crowd-flagged "seen on a recent real exam") -->
+  <div class="screen" id="hotexam">
+    <button class="back-link" onclick="show('home')">‹ Back</button>
+    <div class="card">
+      <h2>🔥 Recently Tested</h2>
+      <p class="desc" id="hotExamTop">Loading…</p>
+    </div>
+    <div id="hotExamList" class="wrong-list-grid"></div>
   </div>
 
   <!-- UPGRADE -->
@@ -1442,6 +1461,7 @@ function renderQuestion(){
 
   document.getElementById('qId').textContent = 'Question ID - ' + q.id + (q.lastEdit ? (' · updated ' + q.lastEdit) : '');
   document.getElementById('qText').textContent = q.question;
+  loadExamFlag(q.id);
 
   var flagBtn = document.getElementById('flagBtn');
   flagBtn.style.display = SESSION.finished ? 'none' : 'inline-block';
@@ -2286,6 +2306,72 @@ async function submitQuestionNote(){
   loadQuestionNotes(qid);
 }
 
+// ── "Recently tested in a real exam" crowd flag ──
+// One flag per pilot per question (a toggle, not a counter you can spam) --
+// b777_exam_flag_counts aggregates everyone's flags; openHotExam() below
+// lists questions ranked by that count, most-flagged first.
+var EXAMFLAG_QID = null;
+var EXAMFLAG_MINE = false;
+async function loadExamFlag(qid){
+  EXAMFLAG_QID = qid;
+  EXAMFLAG_MINE = false;
+  var countEl = document.getElementById('examFlagCount');
+  var btn = document.getElementById('examFlagBtn');
+  btn.disabled = true;
+  btn.textContent = 'Mark: seen on a recent exam';
+  btn.classList.remove('on');
+  if(!navigator.onLine || !sb){ countEl.textContent = 'Offline — can\'t check or mark this right now.'; return; }
+  countEl.textContent = '🔥 …';
+  var uid = await myId();
+  var cr = await sb.from('b777_exam_flag_counts').select('flag_count').eq('question_id', qid).maybeSingle();
+  var mr = uid ? await sb.from('b777_exam_flags').select('question_id').eq('question_id', qid).eq('user_id', uid).maybeSingle() : null;
+  if(EXAMFLAG_QID !== qid) return;   // moved to another question meanwhile
+  var count = (cr.data && cr.data.flag_count) || 0;
+  EXAMFLAG_MINE = !!(mr && mr.data);
+  countEl.textContent = count>0
+    ? ('🔥 ' + count + ' pilot' + (count===1?'':'s') + ' flagged this as seen on a recent exam')
+    : 'No one has flagged this as recently tested yet.';
+  btn.textContent = EXAMFLAG_MINE ? '✓ You flagged this' : 'Mark: seen on a recent exam';
+  btn.classList.toggle('on', EXAMFLAG_MINE);
+  btn.disabled = !uid;
+}
+async function toggleExamFlag(){
+  var qid = EXAMFLAG_QID; if(!qid) return;
+  if(!navigator.onLine || !sb){ alert('You need to be online to do this.'); return; }
+  var uid = await myId(); if(!uid) return;
+  var btn = document.getElementById('examFlagBtn'); btn.disabled = true;
+  var r = EXAMFLAG_MINE
+    ? await sb.from('b777_exam_flags').delete().eq('question_id', qid).eq('user_id', uid)
+    : await sb.from('b777_exam_flags').insert({ question_id: qid, user_id: uid });
+  if(r.error){ alert('Failed: '+r.error.message); btn.disabled = false; return; }
+  loadExamFlag(qid);
+}
+async function openHotExam(){
+  var listEl = document.getElementById('hotExamList');
+  var topEl = document.getElementById('hotExamTop');
+  listEl.innerHTML = '';
+  topEl.textContent = 'Loading…';
+  show('hotexam');
+  if(!navigator.onLine || !sb){ topEl.textContent = 'You are offline — this list needs a connection.'; return; }
+  var r = await sb.from('b777_exam_flag_counts').select('*').order('flag_count',{ascending:false}).limit(50);
+  if(r.error){ topEl.textContent = 'Could not load: '+esc(r.error.message); return; }
+  var rows = (r.data || []).filter(function(x){ return x.flag_count>0; });
+  if(!rows.length){ topEl.textContent = 'No questions flagged yet — be the first to mark one from a recent exam.'; return; }
+  topEl.textContent = rows.length + ' question(s) the community flagged as seen on a recent exam, most-flagged first.';
+  rows.forEach(function(row){
+    var q = QUESTIONS.find(function(x){ return x.id===row.question_id; });
+    if(!q) return;
+    var div = document.createElement('div');
+    div.className = 'wrong-item';
+    div.innerHTML =
+      '<div class="qid">Question ID - '+q.id+' · 🔥 flagged '+row.flag_count+'x</div>' +
+      '<div class="qtext">'+escapeHtml(q.question)+'</div>' +
+      '<div class="line good">Correct answer: '+q.answer+'. '+escapeHtml(q.options[q.answer]||'')+'</div>' +
+      (q.reference ? '<div class="ref">Reference: '+escapeHtml(q.reference)+'</div>' : '');
+    listEl.appendChild(div);
+  });
+}
+
 // ═══ Flight Calculator ═══
 async function openCalc(){
   try{
@@ -2482,7 +2568,7 @@ async function renderAdmin(){
 
 
 // ═══ Smart Version Check (auto-update, keeps offline working) ═══
-var APP_VERSION = '57';  // must match version.json — bump on every deploy
+var APP_VERSION = '58';  // must match version.json — bump on every deploy
 async function checkVersion(){
   // Only run online; offline we happily use the cached app.
   if(!navigator.onLine) return;
