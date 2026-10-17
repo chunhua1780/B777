@@ -1007,6 +1007,8 @@ Answer: C</pre>
     <div class="card">
       <h2>📘 Good to Know</h2>
       <p class="desc">General 777 systems knowledge, by chapter. This is a general-knowledge primer, not your company's manuals — your own OM/FCOM/QRH always wins if anything here ever looks different.</p>
+      <p class="desc" style="margin-top:0;font-size:12px;">How many questions per session?</p>
+      <div class="opt-row" id="gtkCountRow"></div>
       <button class="big-btn" id="gtkDueBtn" onclick="startGTKDue()">Due for review</button>
       <button class="big-btn secondary" onclick="startGTKRandom()">Random mix (all chapters)</button>
     </div>
@@ -1491,6 +1493,23 @@ function startDueReview(){
 
 // ══ Good to Know: general 777 systems knowledge, same FSRS engine as the
 // main bank (CARDS is keyed by id, and gtk- ids never collide with it) ══
+// How many questions a Good to Know session pulls -- same pill pattern as
+// the main bank's practice setup (20/30/50/100/All), shared across Due
+// Review, Random Mix, and per-chapter practice.
+var GTK_COUNT = 20;
+function renderGtkCountPills(){
+  var row = document.getElementById('gtkCountRow');
+  if(!row) return;
+  row.innerHTML = '';
+  [20,30,50,100,'all'].forEach(function(c){
+    var pill = document.createElement('div');
+    pill.className = 'opt-pill' + (c===GTK_COUNT?' sel':'');
+    pill.textContent = c==='all' ? 'All' : c;
+    pill.onclick = function(){ GTK_COUNT = c; renderGtkCountPills(); };
+    row.appendChild(pill);
+  });
+}
+function gtkSessionCount(poolLen){ return GTK_COUNT==='all' ? poolLen : Math.min(GTK_COUNT, poolLen); }
 function openGotoKnow(){
   var el = document.getElementById('gtkChapterList');
   var now = Date.now();
@@ -1504,23 +1523,24 @@ function openGotoKnow(){
   var dueBtn = document.getElementById('gtkDueBtn');
   dueBtn.textContent = dueTotal>0 ? ('Due for review (' + dueTotal + ')') : 'Due for review';
   dueBtn.disabled = dueTotal===0;
+  renderGtkCountPills();
   show('gotoknow');
 }
 function startGTKChapter(key){
   var ch = GTK_CHAPTERS.find(function(c){ return c.key===key; });
   var pool = GTK_QUESTIONS.filter(function(q){ return q.chapter===key; });
   if(pool.length===0) return;
-  newSession('practice', true, 'gtk', pickForReview(pool, pool.length), 'Good to Know · ' + (ch ? ch.label : key));
+  newSession('practice', true, 'gtk', pickForReview(pool, gtkSessionCount(pool.length)), 'Good to Know · ' + (ch ? ch.label : key));
 }
 function startGTKDue(){
   var now = Date.now();
   var pool = GTK_QUESTIONS.filter(function(q){ var c = CARDS[q.id]; return !c || c.seen===0 || c.due<=now; });
   if(pool.length===0) return;
-  newSession('practice', true, 'gtk', pickForReview(pool, pool.length), 'Good to Know · Due Review');
+  newSession('practice', true, 'gtk', pickForReview(pool, gtkSessionCount(pool.length)), 'Good to Know · Due Review');
 }
 function startGTKRandom(){
   if(GTK_QUESTIONS.length===0) return;
-  newSession('practice', true, 'gtk', pickRandom(GTK_QUESTIONS, Math.min(20, GTK_QUESTIONS.length)), 'Good to Know · Random Mix');
+  newSession('practice', true, 'gtk', pickRandom(GTK_QUESTIONS, gtkSessionCount(GTK_QUESTIONS.length)), 'Good to Know · Random Mix');
 }
 
 // ══ My Question Bank: user-uploaded JSON, admin-gated, same FSRS engine ══
@@ -3195,7 +3215,7 @@ async function deleteAnyQuestion(id){
 }
 
 // ═══ Smart Version Check (auto-update, keeps offline working) ═══
-var APP_VERSION = '66';  // must match version.json — bump on every deploy
+var APP_VERSION = '67';  // must match version.json — bump on every deploy
 async function checkVersion(){
   // Only run online; offline we happily use the cached app.
   if(!navigator.onLine) return;
