@@ -2243,13 +2243,18 @@ async function touchProfile(){
     if(!(s.data && s.data.session)) return;
     var u = s.data.session.user;
     var staff = (u.user_metadata && u.user_metadata.staff_id) || '';
+    var isPaid = false;
     if(navigator.onLine){
       try{
         await sb.from('b777_profiles').upsert({ user_id: u.id, staff_id: staff, email: u.email || '', last_seen: new Date().toISOString() }, { ignoreDuplicates: false });
       }catch(netErr){ console.error('profile upsert failed, continuing anyway', netErr); }
+      try{
+        var paidRow = await sb.from('b777_paid_users').select('user_id').eq('user_id', u.id).maybeSingle();
+        isPaid = !!(paidRow && paidRow.data);
+      }catch(paidErr){ console.error('paid-status check failed, continuing anyway', paidErr); }
     }
-    savePass(u.id, staff);   // renew the offline pass on every good online session
-    applyRoles(staff, !!(u.app_metadata && u.app_metadata.b777_admin === true));
+    savePass(u.id, staff, isPaid);   // renew the offline pass on every good online session
+    applyRoles(staff, !!(u.app_metadata && u.app_metadata.b777_admin === true), isPaid);
   }catch(e){}
 }
 async function signOut(){
@@ -2259,14 +2264,19 @@ async function signOut(){
   try{ await sb.auth.signOut(); }catch(e){}
   location.reload();
 }
-function applyRoles(staff, isAdmin){
+function applyRoles(staff, isAdmin, isPaid){
   if(isAdmin){ var a = document.getElementById('adminCard'); if(a) a.style.display = ''; }
-  // Duty Manager, Flight Calculator, Manual Reader, Good to Know, and My
-  // Question Bank are restricted to a single admin account.
+  // Duty Manager, Flight Calculator, and Manual Reader are ops tools, kept
+  // on a single admin account.
   if(String(staff) === '467988'){
     var cc = document.getElementById('calcCard'); if(cc) cc.style.display = '';
     var dc = document.getElementById('dutyManagerCard'); if(dc) dc.style.display = '';
     var mc = document.getElementById('manualReaderCard'); if(mc) mc.style.display = '';
+  }
+  // Good to Know and My Question Bank are the paid tier: unlocked for the
+  // admin account itself, or for anyone with a row in b777_paid_users
+  // (granted from the Admin Dashboard's Users list -- see touchProfile()).
+  if(String(staff) === '467988' || isAdmin || isPaid){
     var gc = document.getElementById('gtkCard'); if(gc) gc.style.display = '';
     var ub = document.getElementById('customBankCard'); if(ub) ub.style.display = '';
   }
@@ -2276,7 +2286,7 @@ function applyRolesFromPass(){
   var p = readPass(); if(!p) return;
   var staff = p.staff;
   if(!staff){ try{ staff = localStorage.getItem('b777_staff') || ''; }catch(e){} }
-  applyRoles(staff, false);
+  applyRoles(staff, false, !!p.paid);
 }
 function enterApp(fresh){
   setTimeout(checkOffline, 300);
@@ -2360,9 +2370,9 @@ async function submitPasswordChange(forced){
 var PASS_KEY = 'b777_pass';
 var OFFLINE_DAYS = 30;
 var OFFLINE_MODE = false;          // true = running on the local pass, no live session
-function savePass(uid, staff){
+function savePass(uid, staff, paid){
   try{ localStorage.setItem(PASS_KEY, JSON.stringify({
-    uid: uid, staff: staff || '', exp: Date.now() + OFFLINE_DAYS*86400000
+    uid: uid, staff: staff || '', paid: !!paid, exp: Date.now() + OFFLINE_DAYS*86400000
   })); }catch(e){}
 }
 function readPass(){
@@ -2876,17 +2886,40 @@ function toggleQuestionMgmt(){
 }
 // Cached from the last renderAdmin() fetch, so clearing the search box
 // re-shows the full list without re-hitting the network.
-var AD_PROFILES = [], AD_BYUSER = {};
+var AD_PROFILES = [], AD_BYUSER = {}, AD_PAID = {}, AD_LAST_ROWS = [];
 function adUserRowHtml(p, byUser){
   var a = byUser[p.user_id] || { sec:0, views:0 };
-  return '<div class="ad-row"><div><div class="au">'+esc(p.staff_id||'?')+'</div><div style="color:var(--sub);font-size:12px;">joined '+fmtTime(p.created_at)+'</div></div>'
+  var paid = !!AD_PAID[p.user_id];
+  return '<div class="ad-row"><div><div class="au">'+esc(p.staff_id||'?')+(paid?' <span style="color:#1a9e5c;font-size:11px;">💎 Paid</span>':'')+'</div><div style="color:var(--sub);font-size:12px;">joined '+fmtTime(p.created_at)+'</div></div>'
     + '<div class="am">'+fmtDur(a.sec)+' · '+a.views+' views<br>last: '+fmtTime(p.last_seen)+'</div>'
-    + '<button class="ad-reset-btn" style="margin-left:8px;font-size:12px;padding:4px 10px;border-radius:8px;border:1px solid var(--line);background:transparent;color:var(--sub);cursor:pointer;" onclick="adminResetPw(\''+p.user_id+'\',\''+esc(p.staff_id||'this user')+'\')">Reset PW</button></div>';
+    + '<div style="display:flex;flex-direction:column;gap:4px;margin-left:8px;">'
+    + '<button class="ad-reset-btn" style="font-size:12px;padding:4px 10px;border-radius:8px;border:1px solid var(--line);background:transparent;color:var(--sub);cursor:pointer;" onclick="adminResetPw(\''+p.user_id+'\',\''+esc(p.staff_id||'this user')+'\')">Reset PW</button>'
+    + '<button class="ad-reset-btn" style="font-size:12px;padding:4px 10px;border-radius:8px;border:1px solid var(--line);background:transparent;color:'+(paid?'#c0392b':'#1a9e5c')+';cursor:pointer;" onclick="togglePaidUser(\''+p.user_id+'\',\''+esc(p.staff_id||'this user')+'\','+paid+')">'+(paid?'Revoke paid':'Grant paid')+'</button>'
+    + '</div></div>';
 }
 function renderAdUserRows(rows, emptyMsg){
+  AD_LAST_ROWS = rows;
   document.getElementById('adUserList').innerHTML = rows.length
     ? rows.map(function(p){ return adUserRowHtml(p, AD_BYUSER); }).join('')
     : '<div class="empty-note">'+(emptyMsg||'No users yet.')+'</div>';
+}
+// Grant/revoke the paid flag (b777_paid_users row) that unlocks Good to Know
+// and My Question Bank -- no real checkout yet, so the admin flips this
+// manually after confirming payment through whatever channel was used.
+async function togglePaidUser(userId, label, isPaidNow){
+  if(isPaidNow){
+    if(!confirm('Revoke paid access for '+label+'?')) return;
+    var r = await sb.from('b777_paid_users').delete().eq('user_id', userId);
+    if(r.error){ alert('Failed: '+r.error.message); return; }
+    delete AD_PAID[userId];
+  } else {
+    if(!confirm('Grant paid access to '+label+'? Good to Know and My Question Bank unlock immediately.')) return;
+    var s = await sb.auth.getSession();
+    var r2 = await sb.from('b777_paid_users').insert({ user_id: userId, granted_by: s.data.session.user.id });
+    if(r2.error){ alert('Failed: '+r2.error.message); return; }
+    AD_PAID[userId] = 1;
+  }
+  renderAdUserRows(AD_LAST_ROWS);
 }
 // Search by staff ID -- the full list can run to hundreds of users, so typing
 // a (debounced) ID queries Supabase directly instead of only filtering
@@ -2960,6 +2993,9 @@ async function renderAdmin(){
   var mAll = await sb.from('b777_chat').select('id',{count:'exact',head:true});
   var mToday = await sb.from('b777_chat').select('id',{count:'exact',head:true}).gte('created_at', todayStart);
   document.getElementById('adMsgs').textContent = (mToday.count||0) + ' / ' + (mAll.count||0);
+  var paidRows = await sb.from('b777_paid_users').select('user_id');
+  AD_PAID = {};
+  (paidRows.data || []).forEach(function(r){ AD_PAID[r.user_id] = 1; });
   AD_PROFILES = profs.data || []; AD_BYUSER = byUser;
   renderAdUserRows(AD_PROFILES);
   var fb = await sb.from('b777_feedback').select('*').order('created_at',{ascending:false}).limit(50);
@@ -3215,7 +3251,7 @@ async function deleteAnyQuestion(id){
 }
 
 // ═══ Smart Version Check (auto-update, keeps offline working) ═══
-var APP_VERSION = '67';  // must match version.json — bump on every deploy
+var APP_VERSION = '68';  // must match version.json — bump on every deploy
 async function checkVersion(){
   // Only run online; offline we happily use the cached app.
   if(!navigator.onLine) return;
