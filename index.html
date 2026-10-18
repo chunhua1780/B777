@@ -2264,6 +2264,11 @@ async function signOut(){
   try{ await sb.auth.signOut(); }catch(e){}
   location.reload();
 }
+// Good to Know and My Question Bank are built as the paid tier, but the
+// paywall itself is switched off for now -- everyone gets them free while
+// people get used to having them. Flip this to true (and redeploy) once
+// ready to actually restrict them to 467988 / admin / paid users.
+var GTK_PAYWALL_ENABLED = false;
 function applyRoles(staff, isAdmin, isPaid){
   if(isAdmin){ var a = document.getElementById('adminCard'); if(a) a.style.display = ''; }
   // Duty Manager, Flight Calculator, and Manual Reader are ops tools, kept
@@ -2273,10 +2278,10 @@ function applyRoles(staff, isAdmin, isPaid){
     var dc = document.getElementById('dutyManagerCard'); if(dc) dc.style.display = '';
     var mc = document.getElementById('manualReaderCard'); if(mc) mc.style.display = '';
   }
-  // Good to Know and My Question Bank are the paid tier: unlocked for the
-  // admin account itself, or for anyone with a row in b777_paid_users
-  // (granted from the Admin Dashboard's Users list -- see touchProfile()).
-  if(String(staff) === '467988' || isAdmin || isPaid){
+  // Unlocked for the admin account itself, or for anyone with a row in
+  // b777_paid_users (granted from the Admin Dashboard's Users list -- see
+  // touchProfile()) -- once GTK_PAYWALL_ENABLED is turned on above.
+  if(!GTK_PAYWALL_ENABLED || String(staff) === '467988' || isAdmin || isPaid){
     var gc = document.getElementById('gtkCard'); if(gc) gc.style.display = '';
     var ub = document.getElementById('customBankCard'); if(ub) ub.style.display = '';
   }
@@ -3251,7 +3256,7 @@ async function deleteAnyQuestion(id){
 }
 
 // ═══ Smart Version Check (auto-update, keeps offline working) ═══
-var APP_VERSION = '68';  // must match version.json — bump on every deploy
+var APP_VERSION = '69';  // must match version.json — bump on every deploy
 async function checkVersion(){
   // Only run online; offline we happily use the cached app.
   if(!navigator.onLine) return;
