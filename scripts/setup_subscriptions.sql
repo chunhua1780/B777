@@ -1,0 +1,12 @@
+-- B777 Question Bank — recurring Stripe subscriptions (on top of
+-- setup_monetization.sql, which must already be applied).
+-- Paste this whole file into Supabase Dashboard → SQL Editor → Run.
+--
+-- A subscription's access window is no longer fixed at purchase time by
+-- a plan's duration_days -- Stripe renews it every billing cycle, and the
+-- updated expiry comes from the subscription object itself
+-- (current_period_end), via customer.subscription.updated /
+-- customer.subscription.deleted webhook events. stripe_subscription_id
+-- is how those events (which carry no client_reference_id) find the
+-- right row to update.
+alter table public.b777_paid_users add column if not exists stripe_subscription_id text unique;

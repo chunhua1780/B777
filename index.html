@@ -653,14 +653,14 @@
       </div>
       <div class="card">
         <h2 style="font-size:16px;">Pricing Plans</h2>
-        <p class="desc" style="margin-top:0;">Each plan needs a Stripe Payment Link created in your Stripe Dashboard first — paste its checkout URL and its "plink_..." id here (see scripts/edge/stripe-webhook.ts for setup steps).</p>
+        <p class="desc" style="margin-top:0;">Each plan needs a Stripe Payment Link created in your Stripe Dashboard first (a recurring price for a subscription works too — renewals keep access alive automatically) — paste its checkout URL and its "plink_..." id here (see scripts/edge/stripe-webhook.ts for setup steps).</p>
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
           <input class="auth-input" id="planId" placeholder="id, e.g. yearly" style="flex:1;min-width:90px;margin-bottom:0;">
           <input class="auth-input" id="planLabel" placeholder="Label, e.g. 年卡" style="flex:1;min-width:90px;margin-bottom:0;">
           <input class="auth-input" id="planPrice" placeholder="Price display, e.g. ¥99 / 年" style="flex:1;min-width:120px;margin-bottom:0;">
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
-          <input class="auth-input" id="planDays" type="number" min="0" placeholder="Duration (days, blank = lifetime)" style="flex:1;min-width:140px;margin-bottom:0;">
+          <input class="auth-input" id="planDays" type="number" min="0" placeholder="Duration days (subscription: ~1 billing period, e.g. 31; blank = lifetime)" style="flex:1;min-width:140px;margin-bottom:0;">
         </div>
         <input class="auth-input" id="planUrl" placeholder="Stripe Payment Link URL (https://buy.stripe.com/...)">
         <input class="auth-input" id="planLinkId" placeholder="Stripe Payment Link id (plink_...)">
@@ -3473,7 +3473,7 @@ async function deleteAnyQuestion(id){
 }
 
 // ═══ Smart Version Check (auto-update, keeps offline working) ═══
-var APP_VERSION = '70';  // must match version.json — bump on every deploy
+var APP_VERSION = '71';  // must match version.json — bump on every deploy
 async function checkVersion(){
   // Only run online; offline we happily use the cached app.
   if(!navigator.onLine) return;
