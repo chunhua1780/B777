@@ -608,6 +608,10 @@
       <div class="auth-msg" id="fbMsg"></div>
       <button class="big-btn" id="fbBtn" onclick="submitFeedback()">Send Feedback</button>
     </div>
+    <div class="card" id="myFeedbackCard" style="display:none;">
+      <h2 style="font-size:16px;">Your past messages</h2>
+      <div id="myFeedbackList"></div>
+    </div>
   </div>
 
   <!-- ADMIN -->
@@ -635,6 +639,35 @@
       <h2 style="font-size:16px;">Users</h2>
       <input class="auth-input" id="adUserSearch" type="search" placeholder="Search by staff ID…" style="margin-bottom:10px;" oninput="searchAdUsers(this.value)">
       <div id="adUserList"><div class="empty-note">Loading…</div></div>
+    </div>
+    <button class="big-btn secondary" id="monToggleBtn" style="margin:4px 0 10px;" onclick="toggleMonetization()">💰 Monetization ▸</button>
+    <div id="monBody" style="display:none;">
+      <div class="card">
+        <h2 style="font-size:16px;">Paywall</h2>
+        <label style="display:flex;align-items:center;gap:8px;margin-bottom:10px;cursor:pointer;">
+          <input type="checkbox" id="monPaywallOn" onchange="saveMonSettings()"> Restrict Good to Know / My Question Bank to paid users
+        </label>
+        <p class="desc" style="margin-top:0;">Daily free-trial minutes (non-paid users), per feature:</p>
+        <input class="auth-input" id="monTrialMinutes" type="number" min="0" step="1" style="max-width:120px;" onchange="saveMonSettings()">
+        <div class="auth-msg" id="monMsg"></div>
+      </div>
+      <div class="card">
+        <h2 style="font-size:16px;">Pricing Plans</h2>
+        <p class="desc" style="margin-top:0;">Each plan needs a Stripe Payment Link created in your Stripe Dashboard first — paste its checkout URL and its "plink_..." id here (see scripts/edge/stripe-webhook.ts for setup steps).</p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
+          <input class="auth-input" id="planId" placeholder="id, e.g. yearly" style="flex:1;min-width:90px;margin-bottom:0;">
+          <input class="auth-input" id="planLabel" placeholder="Label, e.g. 年卡" style="flex:1;min-width:90px;margin-bottom:0;">
+          <input class="auth-input" id="planPrice" placeholder="Price display, e.g. ¥99 / 年" style="flex:1;min-width:120px;margin-bottom:0;">
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
+          <input class="auth-input" id="planDays" type="number" min="0" placeholder="Duration (days, blank = lifetime)" style="flex:1;min-width:140px;margin-bottom:0;">
+        </div>
+        <input class="auth-input" id="planUrl" placeholder="Stripe Payment Link URL (https://buy.stripe.com/...)">
+        <input class="auth-input" id="planLinkId" placeholder="Stripe Payment Link id (plink_...)">
+        <div class="auth-msg" id="planMsg"></div>
+        <button class="big-btn" onclick="submitPlan()">Add / Update Plan</button>
+        <div id="planAdminList" style="margin-top:12px;"></div>
+      </div>
     </div>
     <button class="big-btn secondary" id="qmgmtToggleBtn" style="margin:4px 0 10px;" onclick="toggleQuestionMgmt()">📝 Question Management ▸</button>
     <div id="qmgmtBody" style="display:none;">
@@ -1054,24 +1087,12 @@ Answer: C</pre>
   <!-- UPGRADE -->
   <div class="screen" id="upgrade">
     <button class="back-link" onclick="show('home')">‹ Back</button>
-    <div class="price-card">
-      <div class="amt">$19</div>
-      <div class="per">one-time · lifetime offline access</div>
-    </div>
     <div class="card">
-      <h2 id="upgradeTitle">Keep studying offline</h2>
-      <p class="desc" id="upgradeDesc">Practicing and testing online always stays free. Paying unlocks installing the app to your desktop/iPad/phone with the full question bank cached, so you can keep drilling with zero signal — on a jump seat, in the sim, wherever.</p>
-      <ul class="feature-list">
-        <li><span class="ck">✓</span> Full offline access, no time limit</li>
-        <li><span class="ck">✓</span> Works installed on desktop, iPad and phone</li>
-        <li><span class="ck">✓</span> All 964 questions cached on your device</li>
-        <li><span class="ck">✓</span> Your progress and spaced-repetition schedule stay with you</li>
-        <li><span class="ck">✓</span> One payment, no subscription</li>
-      </ul>
-      <button class="big-btn" onclick="goToPayment()">Continue to Payment</button>
+      <h2 id="upgradeTitle">Unlock Good to Know &amp; My Question Bank</h2>
+      <p class="desc" id="upgradeDesc">You get a few free minutes of these every day. Upgrade for unlimited use, any time.</p>
+      <div id="planList"><div class="empty-note">Loading…</div></div>
       <button class="big-btn secondary" onclick="show('home')">Maybe later</button>
     </div>
-    <div class="memory-tip"><b>Why offline matters here:</b> spaced repetition only works if you actually do the reviews when they come due. Crews lose connectivity constantly — layovers, sim sessions, long-haul legs — and a missed review window is a missed chance to lock in the memory before it fades.</div>
   </div>
 
 </div>
@@ -1265,10 +1286,11 @@ function setupServiceWorker(){
 }
 
 function renderUpgrade(){
-  if(isPaidUser()){
+  if(MY_IS_PAID){
     document.getElementById('upgradeTitle').textContent = 'You\'re all set';
-    document.getElementById('upgradeDesc').textContent = 'Offline access is unlocked on this account. Thanks for supporting the question bank!';
+    document.getElementById('upgradeDesc').textContent = 'Good to Know and My Question Bank are unlocked on this account. Thanks for supporting the question bank!';
   }
+  renderPlans();
 }
 function goToPayment(){
   if(PAYMENT_LINK_URL.indexOf('YOUR-PAYMENT-LINK-HERE') >= 0){
@@ -1276,6 +1298,79 @@ function goToPayment(){
     return;
   }
   location.href = PAYMENT_LINK_URL;
+}
+
+// ══════════════════════════════════════════════════════════════
+// Good to Know / My Question Bank paywall. Admin-configurable from the
+// Admin Dashboard's Monetization card -- nothing here needs a redeploy
+// to change: turning the paywall on/off, the daily free-trial length, and
+// the list of pricing plans (each one a Stripe Payment Link) all live in
+// Supabase (b777_settings / b777_plans) and are loaded once at sign-in.
+// ══════════════════════════════════════════════════════════════
+var SETTINGS = { paywall_enabled: false, trial_minutes_per_day: 5 };
+var MY_STAFF = '', MY_IS_ADMIN = false, MY_IS_PAID = false;
+var TRIAL_SECONDS_USED_TODAY = 0;
+var TRIAL_TIMER = null;
+async function loadSettings(){
+  if(!navigator.onLine || !sb) return;
+  try{
+    var r = await sb.from('b777_settings').select('key,value');
+    (r.data||[]).forEach(function(row){ SETTINGS[row.key] = row.value; });
+  }catch(e){}
+}
+async function loadTrialUsageToday(){
+  TRIAL_SECONDS_USED_TODAY = 0;
+  if(!navigator.onLine || !sb) return;
+  try{
+    var today = new Date().toISOString().slice(0,10);
+    var r = await sb.from('b777_trial_usage').select('seconds').eq('day', today).maybeSingle();
+    TRIAL_SECONDS_USED_TODAY = (r.data && r.data.seconds) || 0;
+  }catch(e){}
+}
+function isFeatureUnlocked(){
+  return !SETTINGS.paywall_enabled || String(MY_STAFF)==='467988' || MY_IS_ADMIN || MY_IS_PAID;
+}
+function trialSecondsRemaining(){
+  return Math.max(0, (SETTINGS.trial_minutes_per_day||0)*60 - TRIAL_SECONDS_USED_TODAY);
+}
+// Call before opening Good to Know / My Question Bank. Returns true if the
+// screen should open; false means it already redirected to the paywall.
+function gateOrUpgrade(message){
+  if(isFeatureUnlocked()) return true;
+  if(trialSecondsRemaining() > 0) return true;
+  alert(message);
+  show('upgrade'); renderUpgrade();
+  return false;
+}
+function startTrialTimer(){
+  stopTrialTimer();
+  if(isFeatureUnlocked()) return;
+  TRIAL_TIMER = setInterval(function(){
+    TRIAL_SECONDS_USED_TODAY += 10;
+    if(navigator.onLine && sb){ sb.rpc('increment_trial_usage', { p_seconds: 10 }).catch(function(){}); }
+    if(trialSecondsRemaining() <= 0){
+      stopTrialTimer();
+      alert('今日的免费体验时间已用完，明天再来，或升级解锁无限使用。');
+      quitSession();
+      show('upgrade'); renderUpgrade();
+    }
+  }, 10000);
+}
+function stopTrialTimer(){ if(TRIAL_TIMER){ clearInterval(TRIAL_TIMER); TRIAL_TIMER = null; } }
+async function renderPlans(){
+  var el = document.getElementById('planList');
+  if(!el) return;
+  if(!navigator.onLine || !sb){ el.innerHTML = '<div class="empty-note">Connect to the internet to see plans.</div>'; return; }
+  var r = await sb.from('b777_plans').select('*').eq('active', true).order('sort_order');
+  var plans = r.data || [];
+  if(plans.length===0){ el.innerHTML = '<div class="empty-note">No plans available yet.</div>'; return; }
+  var uid = await myId();
+  el.innerHTML = plans.map(function(p){
+    var url = p.payment_link_url || '';
+    if(url && uid){ url += (url.indexOf('?')>-1 ? '&' : '?') + 'client_reference_id=' + encodeURIComponent(uid); }
+    return '<div class="price-card" style="margin-bottom:10px;"><div class="amt">'+esc(p.price_display)+'</div><div class="per">'+esc(p.label)+'</div></div>'
+      + '<button class="big-btn" style="margin-bottom:14px;" '+(url ? 'onclick="location.href=\''+url.replace(/'/g,'%27')+'\'"' : 'disabled')+'>Continue to Payment</button>';
+  }).join('');
 }
 
 var MEMORY_TIPS = [
@@ -1393,6 +1488,7 @@ function newSession(mode, instant, catKey, list, label){
   toggleNav(false);
   renderQuestion();
   show('quiz');
+  if(catKey==='gtk' || catKey==='custom') startTrialTimer(); else stopTrialTimer();
 }
 
 function quitSession(){
@@ -1400,6 +1496,7 @@ function quitSession(){
     var answered = SESSION.states.filter(function(s){return s.chosen!==null;}).length;
     if(answered>0 && !confirm('Leave this session? Your answers in it will be lost.')) return;
   }
+  stopTrialTimer();
   SESSION = null;
   show('home'); renderHome();
 }
@@ -1511,6 +1608,7 @@ function renderGtkCountPills(){
 }
 function gtkSessionCount(poolLen){ return GTK_COUNT==='all' ? poolLen : Math.min(GTK_COUNT, poolLen); }
 function openGotoKnow(){
+  if(!gateOrUpgrade('今日的 Good to Know 免费体验时间已用完，明天再来，或升级解锁无限使用。')) return;
   var el = document.getElementById('gtkChapterList');
   var now = Date.now();
   var dueTotal = 0;
@@ -1630,6 +1728,7 @@ function renderCustomBankUI(){
   }).join('');
 }
 function openCustomBank(){
+  if(!gateOrUpgrade('今日的 My Question Bank 免费体验时间已用完，明天再来，或升级解锁无限使用。')) return;
   show('custombank');
   document.getElementById('cbMsg').className = 'auth-msg';
   loadCustomBank();
@@ -1980,6 +2079,7 @@ function finishExam(force){
     SESSION.results.push({ q:q, chosen:st.chosen, chosenDisp: dispOf(st, st.chosen), ansDisp: dispOf(st, q.answer), correct:correct });
   });
   SESSION.finished = true;
+  stopTrialTimer();
   bumpStreak();
   toggleNav(false);
   showResults();
@@ -2249,9 +2349,11 @@ async function touchProfile(){
         await sb.from('b777_profiles').upsert({ user_id: u.id, staff_id: staff, email: u.email || '', last_seen: new Date().toISOString() }, { ignoreDuplicates: false });
       }catch(netErr){ console.error('profile upsert failed, continuing anyway', netErr); }
       try{
-        var paidRow = await sb.from('b777_paid_users').select('user_id').eq('user_id', u.id).maybeSingle();
-        isPaid = !!(paidRow && paidRow.data);
+        var paidRow = await sb.from('b777_paid_users').select('expires_at').eq('user_id', u.id).maybeSingle();
+        isPaid = !!(paidRow && paidRow.data && (!paidRow.data.expires_at || new Date(paidRow.data.expires_at) > new Date()));
       }catch(paidErr){ console.error('paid-status check failed, continuing anyway', paidErr); }
+      await loadSettings();
+      await loadTrialUsageToday();
     }
     savePass(u.id, staff, isPaid);   // renew the offline pass on every good online session
     applyRoles(staff, !!(u.app_metadata && u.app_metadata.b777_admin === true), isPaid);
@@ -2264,12 +2366,8 @@ async function signOut(){
   try{ await sb.auth.signOut(); }catch(e){}
   location.reload();
 }
-// Good to Know and My Question Bank are built as the paid tier, but the
-// paywall itself is switched off for now -- everyone gets them free while
-// people get used to having them. Flip this to true (and redeploy) once
-// ready to actually restrict them to 467988 / admin / paid users.
-var GTK_PAYWALL_ENABLED = false;
 function applyRoles(staff, isAdmin, isPaid){
+  MY_STAFF = staff; MY_IS_ADMIN = isAdmin; MY_IS_PAID = isPaid;
   if(isAdmin){ var a = document.getElementById('adminCard'); if(a) a.style.display = ''; }
   // Duty Manager, Flight Calculator, and Manual Reader are ops tools, kept
   // on a single admin account.
@@ -2278,13 +2376,12 @@ function applyRoles(staff, isAdmin, isPaid){
     var dc = document.getElementById('dutyManagerCard'); if(dc) dc.style.display = '';
     var mc = document.getElementById('manualReaderCard'); if(mc) mc.style.display = '';
   }
-  // Unlocked for the admin account itself, or for anyone with a row in
-  // b777_paid_users (granted from the Admin Dashboard's Users list -- see
-  // touchProfile()) -- once GTK_PAYWALL_ENABLED is turned on above.
-  if(!GTK_PAYWALL_ENABLED || String(staff) === '467988' || isAdmin || isPaid){
-    var gc = document.getElementById('gtkCard'); if(gc) gc.style.display = '';
-    var ub = document.getElementById('customBankCard'); if(ub) ub.style.display = '';
-  }
+  // Good to Know and My Question Bank are always visible -- whether they're
+  // actually free to use is decided at open-time (gateOrUpgrade(), the
+  // Admin Dashboard's paywall toggle and daily trial budget), not by
+  // hiding the menu entry.
+  var gc = document.getElementById('gtkCard'); if(gc) gc.style.display = '';
+  var ub = document.getElementById('customBankCard'); if(ub) ub.style.display = '';
 }
 // Offline we have no profile row to read, so drive the same UI off the local pass.
 function applyRolesFromPass(){
@@ -2851,6 +2948,7 @@ function openFeedback(){
   document.getElementById('fbText').value = '';
   var el = document.getElementById('fbMsg'); el.className='auth-msg'; el.textContent='';
   show('feedback');
+  loadMyFeedback();
 }
 async function submitFeedback(){
   var t = document.getElementById('fbText').value.trim();
@@ -2866,6 +2964,20 @@ async function submitFeedback(){
   if(r.error){ msg.className='auth-msg err'; msg.textContent='Failed: '+r.error.message; return; }
   msg.className='auth-msg ok'; msg.textContent='Sent — thank you! 🙏';
   document.getElementById('fbText').value = '';
+  loadMyFeedback();
+}
+async function loadMyFeedback(){
+  var card = document.getElementById('myFeedbackCard');
+  var list = document.getElementById('myFeedbackList');
+  if(!navigator.onLine || !sb){ card.style.display = 'none'; return; }
+  var r = await sb.from('b777_feedback').select('*').order('created_at',{ascending:false}).limit(20);
+  if(r.error || !r.data || r.data.length===0){ card.style.display = 'none'; return; }
+  card.style.display = '';
+  list.innerHTML = r.data.map(function(f){
+    return '<div class="comment"><div class="cm">'+fmtTime(f.created_at)+'</div><div class="ct">'+esc(f.text)+'</div>'
+      + (f.reply ? '<div class="ct" style="margin-top:6px;color:var(--accent);"><b>Admin reply:</b> '+esc(f.reply)+'</div>' : '<div style="color:var(--sub);font-size:12px;margin-top:4px;">Not answered yet.</div>')
+      + '</div>';
+  }).join('');
 }
 
 // ═══ Admin dashboard ═══
@@ -2880,14 +2992,100 @@ function openAdmin(){
   cancelManageQuestionEdit();
   document.getElementById('qmgmtBody').style.display = 'none';
   document.getElementById('qmgmtToggleBtn').textContent = '📝 Question Management ▸';
+  document.getElementById('monBody').style.display = 'none';
+  document.getElementById('monToggleBtn').textContent = '💰 Monetization ▸';
+  cancelPlanEdit();
   show('admin'); renderAdmin();
   syncAdminQuestions().then(renderManageQuestions);
+  loadMonSettings(); renderPlanAdminList();
 }
 function toggleQuestionMgmt(){
   var body = document.getElementById('qmgmtBody');
   var open = body.style.display !== 'none';
   body.style.display = open ? 'none' : '';
   document.getElementById('qmgmtToggleBtn').textContent = '📝 Question Management ' + (open ? '▸' : '▾');
+}
+function toggleMonetization(){
+  var body = document.getElementById('monBody');
+  var open = body.style.display !== 'none';
+  body.style.display = open ? 'none' : '';
+  document.getElementById('monToggleBtn').textContent = '💰 Monetization ' + (open ? '▸' : '▾');
+}
+async function loadMonSettings(){
+  await loadSettings();
+  document.getElementById('monPaywallOn').checked = !!SETTINGS.paywall_enabled;
+  document.getElementById('monTrialMinutes').value = SETTINGS.trial_minutes_per_day != null ? SETTINGS.trial_minutes_per_day : 5;
+}
+async function saveMonSettings(){
+  var msg = document.getElementById('monMsg');
+  var paywallOn = document.getElementById('monPaywallOn').checked;
+  var minutes = Math.max(0, parseInt(document.getElementById('monTrialMinutes').value, 10) || 0);
+  var r1 = await sb.from('b777_settings').upsert({ key:'paywall_enabled', value: paywallOn });
+  var r2 = await sb.from('b777_settings').upsert({ key:'trial_minutes_per_day', value: minutes });
+  if(r1.error || r2.error){ msg.className='auth-msg err'; msg.textContent='Failed: '+((r1.error||r2.error).message); return; }
+  SETTINGS.paywall_enabled = paywallOn; SETTINGS.trial_minutes_per_day = minutes;
+  msg.className='auth-msg ok'; msg.textContent='Saved.';
+}
+var EDIT_PLAN_ID = null;
+function cancelPlanEdit(){
+  EDIT_PLAN_ID = null;
+  ['planId','planLabel','planPrice','planDays','planUrl','planLinkId'].forEach(function(id){ document.getElementById(id).value = ''; });
+  var m = document.getElementById('planMsg'); if(m) m.className = 'auth-msg';
+}
+async function submitPlan(){
+  var msg = document.getElementById('planMsg'); msg.className = 'auth-msg';
+  var id = document.getElementById('planId').value.trim();
+  var label = document.getElementById('planLabel').value.trim();
+  var price = document.getElementById('planPrice').value.trim();
+  var daysRaw = document.getElementById('planDays').value.trim();
+  var url = document.getElementById('planUrl').value.trim();
+  var linkId = document.getElementById('planLinkId').value.trim();
+  if(!id || !label || !price){ msg.className='auth-msg err'; msg.textContent='Id, label, and price display are required.'; return; }
+  var row = {
+    id: id, label: label, price_display: price,
+    duration_days: daysRaw ? parseInt(daysRaw,10) : null,
+    payment_link_url: url || null, stripe_payment_link_id: linkId || null,
+    active: true
+  };
+  var r = await sb.from('b777_plans').upsert(row);
+  if(r.error){ msg.className='auth-msg err'; msg.textContent='Failed: '+r.error.message; return; }
+  msg.className='auth-msg ok'; msg.textContent='Saved.';
+  cancelPlanEdit();
+  renderPlanAdminList();
+}
+async function renderPlanAdminList(){
+  var el = document.getElementById('planAdminList');
+  if(!el) return;
+  var r = await sb.from('b777_plans').select('*').order('sort_order');
+  var plans = r.data || [];
+  el.innerHTML = plans.length ? plans.map(function(p){
+    return '<div class="ad-row"><div><div class="au">'+esc(p.label)+' ('+esc(p.id)+')'+(p.active?'':' — inactive')+'</div><div style="color:var(--sub);font-size:12px;">'+esc(p.price_display)+' · '+(p.duration_days?p.duration_days+' days':'lifetime')+'</div></div>'
+      + '<div style="display:flex;gap:6px;">'
+      + '<button class="ad-reset-btn" style="font-size:12px;padding:4px 10px;border-radius:8px;border:1px solid var(--line);background:transparent;color:var(--sub);cursor:pointer;" onclick="editPlan(\''+p.id+'\')">Edit</button>'
+      + '<button class="ad-reset-btn" style="font-size:12px;padding:4px 10px;border-radius:8px;border:1px solid var(--line);background:transparent;color:'+(p.active?'#c0392b':'#1a9e5c')+';cursor:pointer;" onclick="togglePlanActive(\''+p.id+'\','+(p.active?'true':'false')+')">'+(p.active?'Deactivate':'Activate')+'</button>'
+      + '<button class="ad-reset-btn" style="font-size:12px;padding:4px 10px;border-radius:8px;border:1px solid var(--line);background:transparent;color:#c0392b;cursor:pointer;" onclick="deletePlan(\''+p.id+'\')">Delete</button>'
+      + '</div></div>';
+  }).join('') : '<div class="empty-note">No plans yet.</div>';
+}
+async function editPlan(id){
+  var r = await sb.from('b777_plans').select('*').eq('id', id).maybeSingle();
+  if(r.error || !r.data) return;
+  var p = r.data;
+  document.getElementById('planId').value = p.id;
+  document.getElementById('planLabel').value = p.label;
+  document.getElementById('planPrice').value = p.price_display;
+  document.getElementById('planDays').value = p.duration_days != null ? p.duration_days : '';
+  document.getElementById('planUrl').value = p.payment_link_url || '';
+  document.getElementById('planLinkId').value = p.stripe_payment_link_id || '';
+}
+async function togglePlanActive(id, isActiveNow){
+  await sb.from('b777_plans').update({ active: !isActiveNow }).eq('id', id);
+  renderPlanAdminList();
+}
+async function deletePlan(id){
+  if(!confirm('Delete plan "'+id+'"?')) return;
+  await sb.from('b777_plans').delete().eq('id', id);
+  renderPlanAdminList();
 }
 // Cached from the last renderAdmin() fetch, so clearing the search box
 // re-shows the full list without re-hitting the network.
@@ -2909,8 +3107,10 @@ function renderAdUserRows(rows, emptyMsg){
     : '<div class="empty-note">'+(emptyMsg||'No users yet.')+'</div>';
 }
 // Grant/revoke the paid flag (b777_paid_users row) that unlocks Good to Know
-// and My Question Bank -- no real checkout yet, so the admin flips this
-// manually after confirming payment through whatever channel was used.
+// and My Question Bank. A real Stripe payment grants this automatically
+// (see scripts/edge/stripe-webhook.ts) -- this button is for granting it
+// by hand after a payment through any other channel (WeChat/Alipay/cash),
+// or for comps.
 async function togglePaidUser(userId, label, isPaidNow){
   if(isPaidNow){
     if(!confirm('Revoke paid access for '+label+'?')) return;
@@ -2918,9 +3118,14 @@ async function togglePaidUser(userId, label, isPaidNow){
     if(r.error){ alert('Failed: '+r.error.message); return; }
     delete AD_PAID[userId];
   } else {
-    if(!confirm('Grant paid access to '+label+'? Good to Know and My Question Bank unlock immediately.')) return;
+    var daysStr = prompt('Grant paid access to '+label+' for how many days? (blank = lifetime)', '365');
+    if(daysStr === null) return; // cancelled
+    daysStr = daysStr.trim();
+    var days = daysStr ? parseInt(daysStr, 10) : null;
+    if(daysStr && (!days || days <= 0)){ alert('Enter a positive number of days, or leave blank for lifetime.'); return; }
     var s = await sb.auth.getSession();
-    var r2 = await sb.from('b777_paid_users').insert({ user_id: userId, granted_by: s.data.session.user.id });
+    var expiresAt = days ? new Date(Date.now() + days*86400000).toISOString() : null;
+    var r2 = await sb.from('b777_paid_users').upsert({ user_id: userId, granted_by: s.data.session.user.id, expires_at: expiresAt, note: 'manual grant' });
     if(r2.error){ alert('Failed: '+r2.error.message); return; }
     AD_PAID[userId] = 1;
   }
@@ -3007,9 +3212,21 @@ async function renderAdmin(){
   var fbEl = document.getElementById('adFeedback');
   if(fb.error){ fbEl.innerHTML = '<div class="empty-note">'+esc(fb.error.message)+'</div>'; }
   else fbEl.innerHTML = (fb.data && fb.data.length) ? fb.data.map(function(f){
-    return '<div class="comment"><div class="cm">'+esc(f.staff_id||'?')+' · '+fmtTime(f.created_at)+'</div><div class="ct">'+esc(f.text)+'</div></div>';
+    return '<div class="comment"><div class="cm">'+esc(f.staff_id||'?')+' · '+fmtTime(f.created_at)+'</div><div class="ct">'+esc(f.text)+'</div>'
+      + (f.reply ? '<div class="ct" style="margin-top:6px;color:var(--accent);"><b>Reply:</b> '+esc(f.reply)+'</div>' : '')
+      + '<button class="ad-reset-btn" style="margin-top:6px;font-size:12px;padding:4px 10px;border-radius:8px;border:1px solid var(--line);background:transparent;color:var(--sub);cursor:pointer;" onclick="replyFeedback(\''+f.id+'\')">'+(f.reply?'Edit reply':'Reply')+'</button></div>';
   }).join('') : '<div class="empty-note">No feedback yet.</div>';
   loadAdminQuestionsList();
+}
+async function replyFeedback(id){
+  var reply = prompt('Reply to this feedback (visible to the person who sent it):', '');
+  if(reply === null) return;
+  reply = reply.trim();
+  if(!reply) return;
+  var s = await sb.auth.getSession();
+  var r = await sb.from('b777_feedback').update({ reply: reply, replied_at: new Date().toISOString(), replied_by: s.data.session.user.id }).eq('id', id);
+  if(r.error){ alert('Failed: '+r.error.message); return; }
+  renderAdmin();
 }
 
 // ══ Admin-added questions: paste into the Interview/Theory/Good to Know
@@ -3256,7 +3473,7 @@ async function deleteAnyQuestion(id){
 }
 
 // ═══ Smart Version Check (auto-update, keeps offline working) ═══
-var APP_VERSION = '69';  // must match version.json — bump on every deploy
+var APP_VERSION = '70';  // must match version.json — bump on every deploy
 async function checkVersion(){
   // Only run online; offline we happily use the cached app.
   if(!navigator.onLine) return;
