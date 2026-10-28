@@ -399,17 +399,18 @@
         <h1>B777 Question Bank</h1>
         <div class="sub" id="homeSub">964 questions</div>
       </div>
-    <div class="seg" id="themeSeg">
+    <div class="seg theme-seg">
       <button onclick="setTheme('auto')" data-t="auto">Auto</button>
       <button onclick="setTheme('light')" data-t="light">☀︎</button>
       <button onclick="setTheme('dark')" data-t="dark">☾</button>
     </div>
       <span class="streak-badge" id="streakBadge" style="display:none;">🔥 <span id="streakN">0</span> day streak</span>
+      <span class="streak-badge" id="memberBadge" style="display:none;"></span>
     </div>
 
     <div class="trial-banner" id="trialBanner" style="display:none;">
       <span id="trialText"></span>
-      <button onclick="show('upgrade');renderUpgrade();">Upgrade</button>
+      <button onclick="show('upgrade');renderUpgrade();">续费</button>
     </div>
 
     <div class="due-card" id="dueCard" style="display:none;">
@@ -652,6 +653,18 @@
         <div class="auth-msg" id="monMsg"></div>
       </div>
       <div class="card">
+        <h2 style="font-size:16px;">Membership Tiers</h2>
+        <p class="desc" style="margin-top:0;">Name as many tiers as you want (普通会员 is implicit — anyone with no tier). Any active tier currently unlocks the same paid features; rank is for future use if some features should need a higher tier.</p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
+          <input class="auth-input" id="tierId" placeholder="id, e.g. vip" style="flex:1;min-width:90px;margin-bottom:0;">
+          <input class="auth-input" id="tierLabel" placeholder="Label, e.g. 高级会员" style="flex:1;min-width:90px;margin-bottom:0;">
+          <input class="auth-input" id="tierRank" type="number" min="0" placeholder="Rank" style="flex:1;min-width:70px;margin-bottom:0;">
+        </div>
+        <div class="auth-msg" id="tierMsg"></div>
+        <button class="big-btn" onclick="submitTier()">Add / Update Tier</button>
+        <div id="tierAdminList" style="margin-top:12px;"></div>
+      </div>
+      <div class="card">
         <h2 style="font-size:16px;">Pricing Plans</h2>
         <p class="desc" style="margin-top:0;">Each plan needs a Stripe Payment Link created in your Stripe Dashboard first (a recurring price for a subscription works too — renewals keep access alive automatically) — paste its checkout URL and its "plink_..." id here (see scripts/edge/stripe-webhook.ts for setup steps).</p>
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
@@ -661,6 +674,7 @@
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
           <input class="auth-input" id="planDays" type="number" min="0" placeholder="Duration days (subscription: ~1 billing period, e.g. 31; blank = lifetime)" style="flex:1;min-width:140px;margin-bottom:0;">
+          <input class="auth-input" id="planTierId" placeholder="Tier id this grants, e.g. premium" style="flex:1;min-width:140px;margin-bottom:0;">
         </div>
         <input class="auth-input" id="planUrl" placeholder="Stripe Payment Link URL (https://buy.stripe.com/...)">
         <input class="auth-input" id="planLinkId" placeholder="Stripe Payment Link id (plink_...)">
@@ -941,6 +955,11 @@ Answer: C</pre>
       <button class="home-chip" onclick="quitSession()">⌂ Home</button>
       <span class="cat-chip" id="quizCatChip">All</span>
       <span class="prog-txt" id="progTxt">1 / 20</span>
+      <div class="seg theme-seg" style="margin-left:8px;">
+        <button onclick="setTheme('auto')" data-t="auto">Auto</button>
+        <button onclick="setTheme('light')" data-t="light">☀︎</button>
+        <button onclick="setTheme('dark')" data-t="dark">☾</button>
+      </div>
     </div>
     <div class="prog-bar"><div class="prog-fill" id="progFill" style="width:0%"></div></div>
 
@@ -1249,8 +1268,9 @@ function isPaidUser(){ return !!(TRIAL.paidUntil && TRIAL.paidUntil > Date.now()
 function offlineAllowed(){ return true; } // free for everyone while we grow the user base
 
 function renderTrialBanner(){
-  // Paid features paused: everything is free for now.
-  document.getElementById('trialBanner').style.display = 'none';
+  // Offline access itself is free for everyone -- the banner this used to
+  // control is now the membership-expiry reminder (renderMembershipBadge()),
+  // called separately so it isn't stomped by this running on every renderHome().
   document.getElementById('installHint').textContent = '💡 Add this page to your Home Screen / Desktop — the whole app and question bank then work fully offline.';
 }
 
@@ -1309,6 +1329,7 @@ function goToPayment(){
 // ══════════════════════════════════════════════════════════════
 var SETTINGS = { paywall_enabled: false, trial_minutes_per_day: 5 };
 var MY_STAFF = '', MY_IS_ADMIN = false, MY_IS_PAID = false;
+var MY_TIER_LABEL = '', MY_EXPIRES_AT = null;
 var TRIAL_SECONDS_USED_TODAY = 0;
 var TRIAL_TIMER = null;
 async function loadSettings(){
@@ -1391,6 +1412,35 @@ function show(id){
   window.scrollTo(0,0);
 }
 
+// Top-right membership badge + an urgent renewal banner in the last 15
+// days before (or after) expiry -- MY_IS_PAID/MY_TIER_LABEL/MY_EXPIRES_AT
+// are set by touchProfile() (online) or applyRolesFromPass() (offline).
+function renderMembershipBadge(){
+  var badge = document.getElementById('memberBadge');
+  var banner = document.getElementById('trialBanner');
+  var text = document.getElementById('trialText');
+  if(!badge || !banner) return;
+  if(!MY_IS_PAID){ badge.style.display = 'none'; banner.style.display = 'none'; return; }
+  badge.style.display = '';
+  if(!MY_EXPIRES_AT){
+    badge.textContent = '💎 ' + (MY_TIER_LABEL || '会员') + ' · 永久';
+    banner.style.display = 'none';
+    return;
+  }
+  var dateStr = new Date(MY_EXPIRES_AT).toISOString().slice(0,10);
+  var daysLeft = Math.ceil((new Date(MY_EXPIRES_AT).getTime() - Date.now()) / 86400000);
+  badge.textContent = '💎 ' + (MY_TIER_LABEL || '会员') + ' · 至 ' + dateStr;
+  if(daysLeft <= 15){
+    banner.style.display = '';
+    banner.classList.toggle('urgent', daysLeft <= 0);
+    text.textContent = daysLeft <= 0
+      ? ('会员已到期（' + dateStr + '），请及时续费')
+      : ('会员将于 ' + daysLeft + ' 天后到期（' + dateStr + '），请及时续费');
+  } else {
+    banner.style.display = 'none';
+  }
+}
+
 function renderHome(){
   document.getElementById('homeSub').textContent = QUESTIONS.length + ' questions';
   var now = Date.now();
@@ -1430,6 +1480,7 @@ function renderHome(){
   }
 
   renderTrialBanner();
+  renderMembershipBadge();
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -1453,9 +1504,10 @@ function applyTheme(){
   var dark = t==='dark' || (t==='auto' && window.matchMedia('(prefers-color-scheme: dark)').matches);
   var meta = document.querySelector('meta[name="theme-color"]');
   if(meta) meta.setAttribute('content', dark ? '#000000' : '#f2f2f7');
-  var seg = document.getElementById('themeSeg');
-  if(seg) seg.querySelectorAll('button').forEach(function(b){
-    b.classList.toggle('sel', b.getAttribute('data-t')===t);
+  document.querySelectorAll('.theme-seg').forEach(function(seg){
+    seg.querySelectorAll('button').forEach(function(b){
+      b.classList.toggle('sel', b.getAttribute('data-t')===t);
+    });
   });
 }
 applyTheme();
@@ -2343,20 +2395,26 @@ async function touchProfile(){
     if(!(s.data && s.data.session)) return;
     var u = s.data.session.user;
     var staff = (u.user_metadata && u.user_metadata.staff_id) || '';
-    var isPaid = false;
+    var isPaid = false, tierLabel = '', expiresAt = null;
     if(navigator.onLine){
       try{
         await sb.from('b777_profiles').upsert({ user_id: u.id, staff_id: staff, email: u.email || '', last_seen: new Date().toISOString() }, { ignoreDuplicates: false });
       }catch(netErr){ console.error('profile upsert failed, continuing anyway', netErr); }
       try{
-        var paidRow = await sb.from('b777_paid_users').select('expires_at').eq('user_id', u.id).maybeSingle();
+        var paidRow = await sb.from('b777_paid_users').select('expires_at, b777_membership_tiers(label)').eq('user_id', u.id).maybeSingle();
         isPaid = !!(paidRow && paidRow.data && (!paidRow.data.expires_at || new Date(paidRow.data.expires_at) > new Date()));
+        if(paidRow && paidRow.data){
+          expiresAt = paidRow.data.expires_at || null;
+          tierLabel = (paidRow.data.b777_membership_tiers && paidRow.data.b777_membership_tiers.label) || '会员';
+        }
       }catch(paidErr){ console.error('paid-status check failed, continuing anyway', paidErr); }
       await loadSettings();
       await loadTrialUsageToday();
     }
-    savePass(u.id, staff, isPaid);   // renew the offline pass on every good online session
+    MY_TIER_LABEL = isPaid ? tierLabel : ''; MY_EXPIRES_AT = isPaid ? expiresAt : null;
+    savePass(u.id, staff, isPaid, MY_TIER_LABEL, MY_EXPIRES_AT);   // renew the offline pass on every good online session
     applyRoles(staff, !!(u.app_metadata && u.app_metadata.b777_admin === true), isPaid);
+    renderMembershipBadge();
   }catch(e){}
 }
 async function signOut(){
@@ -2388,7 +2446,9 @@ function applyRolesFromPass(){
   var p = readPass(); if(!p) return;
   var staff = p.staff;
   if(!staff){ try{ staff = localStorage.getItem('b777_staff') || ''; }catch(e){} }
+  MY_TIER_LABEL = p.tierLabel || ''; MY_EXPIRES_AT = p.expiresAt || null;
   applyRoles(staff, false, !!p.paid);
+  renderMembershipBadge();
 }
 function enterApp(fresh){
   setTimeout(checkOffline, 300);
@@ -2472,9 +2532,9 @@ async function submitPasswordChange(forced){
 var PASS_KEY = 'b777_pass';
 var OFFLINE_DAYS = 30;
 var OFFLINE_MODE = false;          // true = running on the local pass, no live session
-function savePass(uid, staff, paid){
+function savePass(uid, staff, paid, tierLabel, expiresAt){
   try{ localStorage.setItem(PASS_KEY, JSON.stringify({
-    uid: uid, staff: staff || '', paid: !!paid, exp: Date.now() + OFFLINE_DAYS*86400000
+    uid: uid, staff: staff || '', paid: !!paid, tierLabel: tierLabel || '', expiresAt: expiresAt || null, exp: Date.now() + OFFLINE_DAYS*86400000
   })); }catch(e){}
 }
 function readPass(){
@@ -2995,9 +3055,10 @@ function openAdmin(){
   document.getElementById('monBody').style.display = 'none';
   document.getElementById('monToggleBtn').textContent = '💰 Monetization ▸';
   cancelPlanEdit();
+  cancelTierEdit();
   show('admin'); renderAdmin();
   syncAdminQuestions().then(renderManageQuestions);
-  loadMonSettings(); renderPlanAdminList();
+  loadMonSettings(); renderPlanAdminList(); renderTierAdminList();
 }
 function toggleQuestionMgmt(){
   var body = document.getElementById('qmgmtBody');
@@ -3029,8 +3090,53 @@ async function saveMonSettings(){
 var EDIT_PLAN_ID = null;
 function cancelPlanEdit(){
   EDIT_PLAN_ID = null;
-  ['planId','planLabel','planPrice','planDays','planUrl','planLinkId'].forEach(function(id){ document.getElementById(id).value = ''; });
+  ['planId','planLabel','planPrice','planDays','planTierId','planUrl','planLinkId'].forEach(function(id){ document.getElementById(id).value = ''; });
   var m = document.getElementById('planMsg'); if(m) m.className = 'auth-msg';
+}
+// Cached on every renderTierAdminList() -- the Users list's Grant flow
+// reuses it to offer a tier picker without a round trip.
+var AD_TIERS = [];
+function cancelTierEdit(){
+  ['tierId','tierLabel','tierRank'].forEach(function(id){ document.getElementById(id).value = ''; });
+  var m = document.getElementById('tierMsg'); if(m) m.className = 'auth-msg';
+}
+async function submitTier(){
+  var msg = document.getElementById('tierMsg'); msg.className = 'auth-msg';
+  var id = document.getElementById('tierId').value.trim();
+  var label = document.getElementById('tierLabel').value.trim();
+  var rankRaw = document.getElementById('tierRank').value.trim();
+  if(!id || !label){ msg.className='auth-msg err'; msg.textContent='Id and label are required.'; return; }
+  var row = { id: id, label: label, rank: rankRaw ? parseInt(rankRaw,10) : 1 };
+  var r = await sb.from('b777_membership_tiers').upsert(row);
+  if(r.error){ msg.className='auth-msg err'; msg.textContent='Failed: '+r.error.message; return; }
+  msg.className='auth-msg ok'; msg.textContent='Saved.';
+  cancelTierEdit();
+  renderTierAdminList();
+}
+async function editTier(id){
+  var t = AD_TIERS.filter(function(x){ return x.id===id; })[0];
+  if(!t) return;
+  document.getElementById('tierId').value = t.id;
+  document.getElementById('tierLabel').value = t.label;
+  document.getElementById('tierRank').value = t.rank;
+}
+async function deleteTier(id){
+  if(!confirm('Delete tier "'+id+'"? Anyone currently on it keeps their access, just unlabeled.')) return;
+  await sb.from('b777_membership_tiers').delete().eq('id', id);
+  renderTierAdminList();
+}
+async function renderTierAdminList(){
+  var el = document.getElementById('tierAdminList');
+  if(!el) return;
+  var r = await sb.from('b777_membership_tiers').select('*').order('sort_order').order('rank');
+  AD_TIERS = r.data || [];
+  el.innerHTML = AD_TIERS.length ? AD_TIERS.map(function(t){
+    return '<div class="ad-row"><div><div class="au">'+esc(t.label)+' ('+esc(t.id)+')</div><div style="color:var(--sub);font-size:12px;">rank '+t.rank+'</div></div>'
+      + '<div style="display:flex;gap:6px;">'
+      + '<button class="ad-reset-btn" style="font-size:12px;padding:4px 10px;border-radius:8px;border:1px solid var(--line);background:transparent;color:var(--sub);cursor:pointer;" onclick="editTier(\''+t.id+'\')">Edit</button>'
+      + '<button class="ad-reset-btn" style="font-size:12px;padding:4px 10px;border-radius:8px;border:1px solid var(--line);background:transparent;color:#c0392b;cursor:pointer;" onclick="deleteTier(\''+t.id+'\')">Delete</button>'
+      + '</div></div>';
+  }).join('') : '<div class="empty-note">No tiers yet — add one (e.g. 高级会员) above.</div>';
 }
 async function submitPlan(){
   var msg = document.getElementById('planMsg'); msg.className = 'auth-msg';
@@ -3038,12 +3144,14 @@ async function submitPlan(){
   var label = document.getElementById('planLabel').value.trim();
   var price = document.getElementById('planPrice').value.trim();
   var daysRaw = document.getElementById('planDays').value.trim();
+  var tierId = document.getElementById('planTierId').value.trim();
   var url = document.getElementById('planUrl').value.trim();
   var linkId = document.getElementById('planLinkId').value.trim();
   if(!id || !label || !price){ msg.className='auth-msg err'; msg.textContent='Id, label, and price display are required.'; return; }
   var row = {
     id: id, label: label, price_display: price,
     duration_days: daysRaw ? parseInt(daysRaw,10) : null,
+    tier_id: tierId || null,
     payment_link_url: url || null, stripe_payment_link_id: linkId || null,
     active: true
   };
@@ -3059,7 +3167,7 @@ async function renderPlanAdminList(){
   var r = await sb.from('b777_plans').select('*').order('sort_order');
   var plans = r.data || [];
   el.innerHTML = plans.length ? plans.map(function(p){
-    return '<div class="ad-row"><div><div class="au">'+esc(p.label)+' ('+esc(p.id)+')'+(p.active?'':' — inactive')+'</div><div style="color:var(--sub);font-size:12px;">'+esc(p.price_display)+' · '+(p.duration_days?p.duration_days+' days':'lifetime')+'</div></div>'
+    return '<div class="ad-row"><div><div class="au">'+esc(p.label)+' ('+esc(p.id)+')'+(p.active?'':' — inactive')+'</div><div style="color:var(--sub);font-size:12px;">'+esc(p.price_display)+' · '+(p.duration_days?p.duration_days+' days':'lifetime')+' · grants '+esc(p.tier_id||'?')+'</div></div>'
       + '<div style="display:flex;gap:6px;">'
       + '<button class="ad-reset-btn" style="font-size:12px;padding:4px 10px;border-radius:8px;border:1px solid var(--line);background:transparent;color:var(--sub);cursor:pointer;" onclick="editPlan(\''+p.id+'\')">Edit</button>'
       + '<button class="ad-reset-btn" style="font-size:12px;padding:4px 10px;border-radius:8px;border:1px solid var(--line);background:transparent;color:'+(p.active?'#c0392b':'#1a9e5c')+';cursor:pointer;" onclick="togglePlanActive(\''+p.id+'\','+(p.active?'true':'false')+')">'+(p.active?'Deactivate':'Activate')+'</button>'
@@ -3075,6 +3183,7 @@ async function editPlan(id){
   document.getElementById('planLabel').value = p.label;
   document.getElementById('planPrice').value = p.price_display;
   document.getElementById('planDays').value = p.duration_days != null ? p.duration_days : '';
+  document.getElementById('planTierId').value = p.tier_id || '';
   document.getElementById('planUrl').value = p.payment_link_url || '';
   document.getElementById('planLinkId').value = p.stripe_payment_link_id || '';
 }
@@ -3092,12 +3201,13 @@ async function deletePlan(id){
 var AD_PROFILES = [], AD_BYUSER = {}, AD_PAID = {}, AD_LAST_ROWS = [];
 function adUserRowHtml(p, byUser){
   var a = byUser[p.user_id] || { sec:0, views:0 };
-  var paid = !!AD_PAID[p.user_id];
-  return '<div class="ad-row"><div><div class="au">'+esc(p.staff_id||'?')+(paid?' <span style="color:#1a9e5c;font-size:11px;">💎 Paid</span>':'')+'</div><div style="color:var(--sub);font-size:12px;">joined '+fmtTime(p.created_at)+'</div></div>'
+  var m = AD_PAID[p.user_id];
+  var badge = m ? (' <span style="color:#1a9e5c;font-size:11px;">💎 '+esc(m.tierLabel||'会员')+(m.expiresAt?(' · 至 '+esc(m.expiresAt.slice(0,10))):' · 永久')+'</span>') : '';
+  return '<div class="ad-row"><div><div class="au">'+esc(p.staff_id||'?')+badge+'</div><div style="color:var(--sub);font-size:12px;">joined '+fmtTime(p.created_at)+'</div></div>'
     + '<div class="am">'+fmtDur(a.sec)+' · '+a.views+' views<br>last: '+fmtTime(p.last_seen)+'</div>'
     + '<div style="display:flex;flex-direction:column;gap:4px;margin-left:8px;">'
     + '<button class="ad-reset-btn" style="font-size:12px;padding:4px 10px;border-radius:8px;border:1px solid var(--line);background:transparent;color:var(--sub);cursor:pointer;" onclick="adminResetPw(\''+p.user_id+'\',\''+esc(p.staff_id||'this user')+'\')">Reset PW</button>'
-    + '<button class="ad-reset-btn" style="font-size:12px;padding:4px 10px;border-radius:8px;border:1px solid var(--line);background:transparent;color:'+(paid?'#c0392b':'#1a9e5c')+';cursor:pointer;" onclick="togglePaidUser(\''+p.user_id+'\',\''+esc(p.staff_id||'this user')+'\','+paid+')">'+(paid?'Revoke paid':'Grant paid')+'</button>'
+    + '<button class="ad-reset-btn" style="font-size:12px;padding:4px 10px;border-radius:8px;border:1px solid var(--line);background:transparent;color:'+(m?'#c0392b':'#1a9e5c')+';cursor:pointer;" onclick="togglePaidUser(\''+p.user_id+'\',\''+esc(p.staff_id||'this user')+'\','+(m?'true':'false')+')">'+(m?'Revoke membership':'Grant membership')+'</button>'
     + '</div></div>';
 }
 function renderAdUserRows(rows, emptyMsg){
@@ -3106,28 +3216,37 @@ function renderAdUserRows(rows, emptyMsg){
     ? rows.map(function(p){ return adUserRowHtml(p, AD_BYUSER); }).join('')
     : '<div class="empty-note">'+(emptyMsg||'No users yet.')+'</div>';
 }
-// Grant/revoke the paid flag (b777_paid_users row) that unlocks Good to Know
+// Grant/revoke membership (a b777_paid_users row) that unlocks Good to Know
 // and My Question Bank. A real Stripe payment grants this automatically
 // (see scripts/edge/stripe-webhook.ts) -- this button is for granting it
 // by hand after a payment through any other channel (WeChat/Alipay/cash),
 // or for comps.
 async function togglePaidUser(userId, label, isPaidNow){
   if(isPaidNow){
-    if(!confirm('Revoke paid access for '+label+'?')) return;
+    if(!confirm('Revoke membership for '+label+'?')) return;
     var r = await sb.from('b777_paid_users').delete().eq('user_id', userId);
     if(r.error){ alert('Failed: '+r.error.message); return; }
     delete AD_PAID[userId];
   } else {
-    var daysStr = prompt('Grant paid access to '+label+' for how many days? (blank = lifetime)', '365');
+    if(AD_TIERS.length===0) await renderTierAdminList();
+    var tierIds = AD_TIERS.map(function(t){ return t.id; }).join(', ') || '(no tiers defined yet — add one in Monetization first)';
+    if(AD_TIERS.length===0){ alert('Define at least one membership tier first (Monetization card below).'); return; }
+    var defaultTier = AD_TIERS[0].id;
+    var tierId = prompt('Grant which tier to '+label+'? Available: '+tierIds, defaultTier);
+    if(tierId === null) return; // cancelled
+    tierId = tierId.trim();
+    if(AD_TIERS.filter(function(t){ return t.id===tierId; }).length===0){ alert('Unknown tier "'+tierId+'".'); return; }
+    var daysStr = prompt('For how many days? (blank = lifetime)', '365');
     if(daysStr === null) return; // cancelled
     daysStr = daysStr.trim();
     var days = daysStr ? parseInt(daysStr, 10) : null;
     if(daysStr && (!days || days <= 0)){ alert('Enter a positive number of days, or leave blank for lifetime.'); return; }
     var s = await sb.auth.getSession();
     var expiresAt = days ? new Date(Date.now() + days*86400000).toISOString() : null;
-    var r2 = await sb.from('b777_paid_users').upsert({ user_id: userId, granted_by: s.data.session.user.id, expires_at: expiresAt, note: 'manual grant' });
+    var r2 = await sb.from('b777_paid_users').upsert({ user_id: userId, tier_id: tierId, granted_by: s.data.session.user.id, expires_at: expiresAt, note: 'manual grant' });
     if(r2.error){ alert('Failed: '+r2.error.message); return; }
-    AD_PAID[userId] = 1;
+    var tierLabel = (AD_TIERS.filter(function(t){ return t.id===tierId; })[0]||{}).label || tierId;
+    AD_PAID[userId] = { tierLabel: tierLabel, expiresAt: expiresAt };
   }
   renderAdUserRows(AD_LAST_ROWS);
 }
@@ -3203,9 +3322,11 @@ async function renderAdmin(){
   var mAll = await sb.from('b777_chat').select('id',{count:'exact',head:true});
   var mToday = await sb.from('b777_chat').select('id',{count:'exact',head:true}).gte('created_at', todayStart);
   document.getElementById('adMsgs').textContent = (mToday.count||0) + ' / ' + (mAll.count||0);
-  var paidRows = await sb.from('b777_paid_users').select('user_id');
+  var paidRows = await sb.from('b777_paid_users').select('user_id, expires_at, b777_membership_tiers(label)');
   AD_PAID = {};
-  (paidRows.data || []).forEach(function(r){ AD_PAID[r.user_id] = 1; });
+  (paidRows.data || []).forEach(function(r){
+    AD_PAID[r.user_id] = { tierLabel: (r.b777_membership_tiers && r.b777_membership_tiers.label) || '会员', expiresAt: r.expires_at };
+  });
   AD_PROFILES = profs.data || []; AD_BYUSER = byUser;
   renderAdUserRows(AD_PROFILES);
   var fb = await sb.from('b777_feedback').select('*').order('created_at',{ascending:false}).limit(50);
@@ -3473,7 +3594,7 @@ async function deleteAnyQuestion(id){
 }
 
 // ═══ Smart Version Check (auto-update, keeps offline working) ═══
-var APP_VERSION = '71';  // must match version.json — bump on every deploy
+var APP_VERSION = '72';  // must match version.json — bump on every deploy
 async function checkVersion(){
   // Only run online; offline we happily use the cached app.
   if(!navigator.onLine) return;
