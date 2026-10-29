@@ -42,7 +42,14 @@
   .toolbar button{width:22px; height:22px; border-radius:50%; border:1px solid rgba(255,255,255,0.2); cursor:pointer; padding:0;}
   .toolbar button.note-btn{width:auto; height:auto; border-radius:6px; border:none; background:transparent; color:var(--muted); font-size:13px; padding:2px 6px;}
   .toolbar button.clear-btn{width:auto; height:auto; border-radius:6px; border:none; background:transparent; color:var(--muted); font-size:12px; padding:2px 6px;}
-  .hl-yellow{background:rgba(255,224,102,0.16);} .hl-green{background:rgba(92,255,177,0.14);} .hl-blue{background:rgba(106,184,255,0.14);} .hl-pink{background:rgba(255,133,193,0.14);} .hl-orange{background:rgba(255,163,92,0.16);} .hl-purple{background:rgba(196,139,255,0.15);}
+  .reader-mark{cursor:pointer;}
+  .reader-mark.has-label:after{content:attr(data-label); font-size:9.5px; vertical-align:super; margin-left:1px; opacity:.85;}
+  .sel-toolbar{position:fixed; display:flex; gap:5px; align-items:center; background:var(--panel-2); border:1px solid var(--line-bright); border-radius:20px; padding:6px 8px; box-shadow:0 8px 24px rgba(0,0,0,0.45); z-index:60;}
+  .sel-toolbar .sw{width:22px; height:22px; border-radius:50%; border:1px solid rgba(255,255,255,0.25); cursor:pointer; padding:0;}
+  .sel-toolbar .styletab{display:flex; gap:2px; background:var(--panel); border-radius:14px; padding:2px; margin-right:4px;}
+  .sel-toolbar .styletab button{border:none; background:transparent; color:var(--muted); font-size:11px; padding:4px 7px; border-radius:12px; cursor:pointer;}
+  .sel-toolbar .styletab button.active{background:var(--panel-2); color:var(--green);}
+  .sel-toolbar .mini-btn{border:none; background:transparent; color:var(--muted); font-size:11px; padding:4px 6px; cursor:pointer; border-radius:6px;}
   .note-box{margin-top:6px; padding:8px 10px; background:var(--panel-2); border-left:3px solid var(--amber); border-radius:6px; font-size:12.5px; color:var(--amber); display:none;}
   .note-box.show{display:block;}
   .note-box textarea{width:100%; background:transparent; border:none; color:var(--amber); font-family:var(--sans); font-size:12.5px; resize:vertical; min-height:40px;}
@@ -61,7 +68,7 @@
     <h1>Manual Reader — Chapter 7 FTL</h1>
     <div style="display:flex; gap:6px; align-items:center;">
       <button id="addChapterBtn" style="display:none; background:var(--panel-2); border:1px solid var(--green); color:var(--green); font-size:11px; padding:5px 10px; border-radius:6px; cursor:pointer;">+ Add Chapter</button>
-      <button id="prefsBtn" style="background:var(--panel-2); border:1px solid var(--line-bright); color:var(--muted); font-size:11px; padding:5px 10px; border-radius:6px; cursor:pointer;">Aa</button>
+      <button id="prefsBtn" style="background:var(--panel-2); border:1px solid var(--line-bright); color:var(--muted); font-size:11px; padding:5px 10px; border-radius:6px; cursor:pointer;">🎨 Aa 外观</button>
       <button id="bookmarksBtn" style="background:var(--panel-2); border:1px solid var(--line-bright); color:var(--muted); font-size:11px; padding:5px 10px; border-radius:6px; cursor:pointer;">★ Bookmarks</button>
       <button id="langToggle" style="background:var(--panel-2); border:1px solid var(--line-bright); color:var(--green); font-size:11px; font-weight:700; padding:5px 10px; border-radius:6px; cursor:pointer;">中文</button>
     </div>
@@ -104,7 +111,7 @@
   </div>
 
   <div id="readerHint" style="display:none; text-align:center; font-size:11.5px; color:var(--muted); padding:6px 16px; border-bottom:1px solid var(--line); background:var(--panel);">
-    点击任意段落可以高亮、加笔记、收藏 · Tap any paragraph to highlight, add a note, or bookmark it
+    选中文字可以标颜色/下划线/方框/加符号；点击段落可以加笔记、收藏；点右上角"🎨 Aa 外观"可换背景颜色和字体
   </div>
   <div id="readerRoot" class="layout">
     <nav class="side" id="sideNav"></nav>
@@ -348,15 +355,6 @@ async function saveAnnotation(sectionId, paraKey, color, note, bookmarked){
   }catch(e){ console.error('saveAnnotation failed (offline?)', e); }
 }
 
-function setHighlight(sectionId, paraKey, color){
-  var key = annoKey(sectionId, paraKey);
-  var existing = annotationCache[key] || {};
-  existing.color = color;
-  annotationCache[key] = existing;
-  saveAnnotation(sectionId, paraKey, color, existing.note || null, existing.bookmarked);
-  renderSection(currentSectionId);
-}
-
 function setNote(sectionId, paraKey, note){
   var key = annoKey(sectionId, paraKey);
   var existing = annotationCache[key] || {};
@@ -364,6 +362,163 @@ function setNote(sectionId, paraKey, note){
   annotationCache[key] = existing;
   saveAnnotation(sectionId, paraKey, existing.color || null, note, existing.bookmarked);
 }
+
+function escapeHtml(s){
+  return String(s).replace(/[&<>"]/g, function(c){
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];
+  });
+}
+
+// ================= TEXT-SELECTION MARKS (highlight / underline / box) =================
+// Finer-grained than the paragraph-level color used to be: anchored to a
+// character range within one paragraph's own text, so you can mark a
+// phrase instead of the whole paragraph. Rendered by slicing the
+// paragraph's plain text around each mark's [start,end) and wrapping that
+// slice in a styled <mark>; marks never overlap -- adding a new one drops
+// anything it overlaps.
+var marksCache = {}; // key: sectionId|paraKey -> array of {id, start, end, style, color, label}
+
+async function loadMarks(){
+  if(!currentUserId) return;
+  var r = await sb.from('manual_marks').select('*').eq('user_id', currentUserId);
+  if(r.error){ console.error(r.error); return; }
+  marksCache = {};
+  (r.data||[]).forEach(function(row){
+    var key = annoKey(row.section_id, row.para_key);
+    if(!marksCache[key]) marksCache[key] = [];
+    marksCache[key].push({ id: row.id, start: row.start_offset, end: row.end_offset, style: row.style, color: row.color, label: row.label, lang: row.lang||'zh' });
+  });
+}
+
+async function addMark(sectionId, paraKey, start, end, style, color, label){
+  var key = annoKey(sectionId, paraKey);
+  var list = (marksCache[key] || []).filter(function(m){ return m.lang!==currentLang || end<=m.start || start>=m.end; }); // drop same-language overlaps
+  var mark = { id: 'tmp-'+Date.now(), start: start, end: end, style: style, color: color, label: label||null, lang: currentLang };
+  list.push(mark);
+  marksCache[key] = list;
+  renderSection(currentSectionId);
+  try{ localStorage.setItem('manual_marks_cache', JSON.stringify(marksCache)); }catch(e){}
+  if(!currentUserId || !navigator.onLine) return;
+  try{
+    var r = await sb.from('manual_marks').insert({
+      user_id: currentUserId, section_id: sectionId, para_key: paraKey,
+      start_offset: start, end_offset: end, style: style, color: color, label: label||null, lang: currentLang
+    }).select().single();
+    if(!r.error && r.data) mark.id = r.data.id;
+  }catch(e){ console.error('addMark failed (offline?)', e); }
+}
+
+async function removeMark(sectionId, paraKey, markId){
+  var key = annoKey(sectionId, paraKey);
+  marksCache[key] = (marksCache[key]||[]).filter(function(m){ return m.id!==markId; });
+  renderSection(currentSectionId);
+  try{ localStorage.setItem('manual_marks_cache', JSON.stringify(marksCache)); }catch(e){}
+  if(!currentUserId || !navigator.onLine || String(markId).indexOf('tmp-')===0) return;
+  try{ await sb.from('manual_marks').delete().eq('id', markId); }catch(e){ console.error('removeMark failed', e); }
+}
+
+function renderParaHtml(sectionId, paraKey, text){
+  var marks = (marksCache[annoKey(sectionId, paraKey)] || []).filter(function(m){ return m.lang===currentLang; }).sort(function(a,b){ return a.start-b.start; });
+  var html = '', pos = 0;
+  marks.forEach(function(m){
+    if(m.start < pos || m.start>=m.end || m.end>text.length) return;
+    html += escapeHtml(text.slice(pos, m.start));
+    var hex = (HIGHLIGHT_COLORS.filter(function(c){ return c.name===m.color; })[0]||HIGHLIGHT_COLORS[0]).hex;
+    var styleAttr;
+    if(m.style==='underline') styleAttr = 'background:transparent;text-decoration:underline;text-decoration-color:'+hex+';text-decoration-thickness:2px;';
+    else if(m.style==='box') styleAttr = 'background:transparent;border:1.5px solid '+hex+';border-radius:3px;padding:0 2px;';
+    else styleAttr = 'background:'+hex+'55;border-radius:2px;';
+    // The label is a CSS ::after pseudo-element (content: attr(data-label)),
+    // not a real text node -- a real one would get counted by
+    // getParaTextOffset()'s Range.toString() and throw off every mark
+    // positioned after it in the paragraph.
+    html += '<mark class="reader-mark' + (m.label?' has-label':'') + '" data-mark-id="'+m.id+'" data-section="'+sectionId+'" data-key="'+paraKey+'"' + (m.label?' data-label="['+escapeHtml(m.label)+']"':'') + ' style="'+styleAttr+'" title="Tap to remove">'+escapeHtml(text.slice(m.start, m.end))+'</mark>';
+    pos = m.end;
+  });
+  html += escapeHtml(text.slice(pos));
+  return html;
+}
+
+function getParaTextOffset(paraTextEl, node, offset){
+  var range = document.createRange();
+  range.selectNodeContents(paraTextEl);
+  range.setEnd(node, offset);
+  return range.toString().length;
+}
+
+var SEL_TOOLBAR = null, SEL_STYLE = 'highlight';
+function hideSelToolbar(){ if(SEL_TOOLBAR){ SEL_TOOLBAR.remove(); SEL_TOOLBAR = null; } }
+function renderSelToolbarHtml(){
+  var styles = [['highlight','高亮'],['underline','下划线'],['box','方框']];
+  var tabsHtml = styles.map(function(s){
+    return '<button data-style="'+s[0]+'" class="'+(SEL_STYLE===s[0]?'active':'')+'">'+s[1]+'</button>';
+  }).join('');
+  var swHtml = HIGHLIGHT_COLORS.map(function(c){
+    return '<button class="sw" data-color="'+c.name+'" style="background:'+c.hex+'"></button>';
+  }).join('');
+  return '<div class="styletab">'+tabsHtml+'</div>' + swHtml +
+    '<button class="mini-btn mark-label-btn">+标注</button>';
+}
+function showSelToolbar(rect, sectionId, paraKey, start, end){
+  hideSelToolbar();
+  var el = document.createElement('div');
+  el.className = 'sel-toolbar';
+  el.innerHTML = renderSelToolbarHtml();
+  document.body.appendChild(el);
+  var top = rect.top - el.offsetHeight - 10;
+  if(top < 4) top = rect.bottom + 10;
+  var left = Math.min(Math.max(8, rect.left), window.innerWidth - el.offsetWidth - 8);
+  el.style.top = top + 'px'; el.style.left = left + 'px';
+  SEL_TOOLBAR = el;
+  Array.prototype.forEach.call(el.querySelectorAll('.styletab button'), function(btn){
+    btn.addEventListener('click', function(e){
+      e.stopPropagation();
+      SEL_STYLE = btn.dataset.style;
+      el.querySelectorAll('.styletab button').forEach(function(b){ b.classList.toggle('active', b===btn); });
+    });
+  });
+  Array.prototype.forEach.call(el.querySelectorAll('.sw'), function(btn){
+    btn.addEventListener('click', function(e){
+      e.stopPropagation();
+      addMark(sectionId, paraKey, start, end, SEL_STYLE, btn.dataset.color, null);
+      window.getSelection().removeAllRanges();
+      hideSelToolbar();
+    });
+  });
+  el.querySelector('.mark-label-btn').addEventListener('click', function(e){
+    e.stopPropagation();
+    var label = prompt('在这段文字后面加个小标注（符号或文字，比如 ✓ 或"重点"）：', '');
+    if(label===null) return;
+    addMark(sectionId, paraKey, start, end, SEL_STYLE, HIGHLIGHT_COLORS[0].name, label.trim().slice(0,12) || null);
+    window.getSelection().removeAllRanges();
+    hideSelToolbar();
+  });
+}
+function trySelectionToolbar(){
+  setTimeout(function(){
+    var sel = window.getSelection();
+    if(!sel || sel.isCollapsed || sel.rangeCount===0){ return; }
+    var range = sel.getRangeAt(0);
+    var startEl = range.startContainer.nodeType===1 ? range.startContainer : range.startContainer.parentElement;
+    var endEl = range.endContainer.nodeType===1 ? range.endContainer : range.endContainer.parentElement;
+    var paraTextEl = startEl.closest('.para-text');
+    if(!paraTextEl || paraTextEl !== endEl.closest('.para-text')) return; // must stay within one paragraph's text
+    var start = getParaTextOffset(paraTextEl, range.startContainer, range.startOffset);
+    var end = getParaTextOffset(paraTextEl, range.endContainer, range.endOffset);
+    if(end<=start) return;
+    showSelToolbar(range.getBoundingClientRect(), paraTextEl.dataset.section, paraTextEl.dataset.key, start, end);
+  }, 10);
+}
+document.addEventListener('mouseup', trySelectionToolbar);
+document.addEventListener('touchend', trySelectionToolbar);
+document.addEventListener('click', function(e){
+  if(e.target.closest && e.target.closest('.reader-mark')){
+    var t = e.target.closest('.reader-mark');
+    if(confirm('移除这个标注吗？')) removeMark(t.dataset.section, t.dataset.key, t.dataset.markId);
+    return;
+  }
+  if(SEL_TOOLBAR && !e.target.closest('.sel-toolbar')) hideSelToolbar();
+});
 
 // ================= READING PREFERENCES (font size, line spacing, theme) =================
 var READER_PREFS_KEY = 'manual_reader_prefs';
@@ -446,26 +601,20 @@ function renderSection(id, scrollToKey){
   var titleText = currentLang==='zh' ? (section.title_zh||section.title) : section.title;
   var deleteBtnHtml = section._admin ? ('<button id="deleteSectionBtn" style="float:right; background:transparent; border:1px solid var(--red); color:var(--red); font-size:11px; padding:4px 10px; border-radius:6px; cursor:pointer;">Delete chapter</button>') : '';
   var html = '<div class="secid">SECTION ' + section.id + (section._admin?' \u00b7 admin-added':'') + '</div>' + deleteBtnHtml + '<h2>' + titleText + '</h2>';
-  var colorBtnsHtml = HIGHLIGHT_COLORS.map(function(c){
-    return '<button style="background:' + c.hex + '" data-color="' + c.name + '" class="hl-btn" title="' + c.name + '"></button>';
-  }).join('');
   section.paragraphs.forEach(function(p){
     var pk = p.key;
     var text = currentLang==='zh' ? p.zh : p.en;
     var key = annoKey(section.id, pk);
     var anno = annotationCache[key] || {};
-    var hlClass = anno.color ? ('hl-' + anno.color) : '';
     var starOn = anno.bookmarked;
     var domSafeId = 'p-' + section.id.replace(/\W/g,'_') + '-' + pk;
     html +=
-      '<div class="para ' + hlClass + '" data-key="' + pk + '" id="' + domSafeId + '">' +
+      '<div class="para" data-key="' + pk + '" id="' + domSafeId + '">' +
         '<div class="toolbar" data-section="' + section.id + '" data-key="' + pk + '">' +
-          colorBtnsHtml +
-          '<button class="clear-btn hl-clear">clear</button>' +
           '<button class="note-btn hl-note">note</button>' +
           '<button class="note-btn hl-star" style="color:' + (starOn?'#ffc94a':'var(--muted)') + '">' + (starOn?'\u2605':'\u2606') + '</button>' +
         '</div>' +
-        text +
+        '<span class="para-text" data-section="' + section.id + '" data-key="' + pk + '">' + renderParaHtml(section.id, pk, text) + '</span>' +
         '<div class="note-box' + (anno.note ? ' show' : '') + '" id="note-' + section.id.replace(/\W/g,'_') + '-' + pk + '">' +
           '<textarea placeholder="Your note..." data-section="' + section.id + '" data-key="' + pk + '">' + (anno.note||'') + '</textarea>' +
         '</div>' +
@@ -478,10 +627,6 @@ function renderSection(id, scrollToKey){
   // wire up toolbar buttons (avoids fragile inline-onclick string escaping with colors/keys)
   Array.prototype.forEach.call(main.querySelectorAll('.toolbar'), function(tb){
     var sid = tb.dataset.section, pk = tb.dataset.key;
-    Array.prototype.forEach.call(tb.querySelectorAll('.hl-btn'), function(btn){
-      btn.addEventListener('click', function(){ setHighlight(sid, pk, btn.dataset.color); });
-    });
-    tb.querySelector('.hl-clear').addEventListener('click', function(){ setHighlight(sid, pk, null); });
     tb.querySelector('.hl-note').addEventListener('click', function(){ toggleNote(sid, pk); });
     tb.querySelector('.hl-star').addEventListener('click', function(){ toggleBookmark(sid, pk); });
   });
@@ -494,7 +639,9 @@ function renderSection(id, scrollToKey){
   // one paragraph's toolbar closes any other that was open).
   Array.prototype.forEach.call(main.querySelectorAll('.para'), function(para){
     para.addEventListener('click', function(e){
-      if(e.target.closest('.toolbar') || e.target.closest('.note-box')) return;
+      if(e.target.closest('.toolbar') || e.target.closest('.note-box') || e.target.closest('.reader-mark')) return;
+      var sel = window.getSelection();
+      if(sel && !sel.isCollapsed && sel.toString().length>0) return; // this click just ended a text selection
       var wasOpen = para.classList.contains('toolbar-open');
       main.querySelectorAll('.para.toolbar-open').forEach(function(p){ p.classList.remove('toolbar-open'); });
       if(!wasOpen) para.classList.add('toolbar-open');
@@ -729,6 +876,7 @@ async function checkAccess(){
     }
     currentUserId = uid;
     await loadAnnotations();
+    await loadMarks();
     try{ localStorage.setItem(ANNO_CACHE_KEY, JSON.stringify(annotationCache)); }catch(e){}
     localStorage.setItem(CACHE_KEY, '1');
     showReader();
@@ -736,6 +884,7 @@ async function checkAccess(){
     console.error(e);
     if(localStorage.getItem(CACHE_KEY) === '1'){
       try{ annotationCache = JSON.parse(localStorage.getItem(ANNO_CACHE_KEY) || '{}'); }catch(e2){ annotationCache = {}; }
+      try{ marksCache = JSON.parse(localStorage.getItem('manual_marks_cache') || '{}'); }catch(e3){ marksCache = {}; }
       showReader();
     } else {
       gateEl.innerHTML = '<div><h2>Error checking access</h2><p>Please try again later.</p></div>';
