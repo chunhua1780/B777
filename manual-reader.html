@@ -37,11 +37,11 @@
   main h2{font-size:19px; margin:0 0 4px;}
   main .secid{font-family:var(--mono); color:var(--green); font-size:12px; letter-spacing:.05em;}
   .para{position:relative; padding:10px 12px; border-radius:8px; margin-bottom:8px; line-height:var(--reader-line-height, 1.65); font-size:var(--reader-font-size, 14.5px); transition:background .15s;}
-  .para:hover .toolbar{opacity:1;}
-  .toolbar{position:absolute; top:-14px; right:8px; display:flex; gap:4px; opacity:0; transition:opacity .15s; background:var(--panel-2); border:1px solid var(--line-bright); border-radius:20px; padding:3px 6px;}
-  .toolbar button{width:16px; height:16px; border-radius:50%; border:1px solid rgba(255,255,255,0.2); cursor:pointer; padding:0;}
-  .toolbar button.note-btn{width:auto; height:auto; border-radius:6px; border:none; background:transparent; color:var(--muted); font-size:11px; padding:0 4px;}
-  .toolbar button.clear-btn{width:auto; height:auto; border-radius:6px; border:none; background:transparent; color:var(--muted); font-size:11px; padding:0 4px;}
+  .para:hover .toolbar, .para.toolbar-open .toolbar{opacity:1;}
+  .toolbar{position:absolute; top:-18px; right:8px; display:flex; gap:6px; opacity:0; transition:opacity .15s; background:var(--panel-2); border:1px solid var(--line-bright); border-radius:20px; padding:5px 8px; z-index:5;}
+  .toolbar button{width:22px; height:22px; border-radius:50%; border:1px solid rgba(255,255,255,0.2); cursor:pointer; padding:0;}
+  .toolbar button.note-btn{width:auto; height:auto; border-radius:6px; border:none; background:transparent; color:var(--muted); font-size:13px; padding:2px 6px;}
+  .toolbar button.clear-btn{width:auto; height:auto; border-radius:6px; border:none; background:transparent; color:var(--muted); font-size:12px; padding:2px 6px;}
   .hl-yellow{background:rgba(255,224,102,0.16);} .hl-green{background:rgba(92,255,177,0.14);} .hl-blue{background:rgba(106,184,255,0.14);} .hl-pink{background:rgba(255,133,193,0.14);} .hl-orange{background:rgba(255,163,92,0.16);} .hl-purple{background:rgba(196,139,255,0.15);}
   .note-box{margin-top:6px; padding:8px 10px; background:var(--panel-2); border-left:3px solid var(--amber); border-radius:6px; font-size:12.5px; color:var(--amber); display:none;}
   .note-box.show{display:block;}
@@ -103,6 +103,9 @@
     </div>
   </div>
 
+  <div id="readerHint" style="display:none; text-align:center; font-size:11.5px; color:var(--muted); padding:6px 16px; border-bottom:1px solid var(--line); background:var(--panel);">
+    点击任意段落可以高亮、加笔记、收藏 · Tap any paragraph to highlight, add a note, or bookmark it
+  </div>
   <div id="readerRoot" class="layout">
     <nav class="side" id="sideNav"></nav>
     <main id="mainContent"></main>
@@ -485,6 +488,18 @@ function renderSection(id, scrollToKey){
   Array.prototype.forEach.call(main.querySelectorAll('.note-box textarea'), function(ta){
     ta.addEventListener('blur', function(){ setNote(ta.dataset.section, ta.dataset.key, ta.value); });
   });
+  // Touch devices have no :hover, so the toolbar would otherwise be
+  // impossible to open -- tapping the paragraph text toggles it instead
+  // (taps inside the toolbar or the note box are left alone, and opening
+  // one paragraph's toolbar closes any other that was open).
+  Array.prototype.forEach.call(main.querySelectorAll('.para'), function(para){
+    para.addEventListener('click', function(e){
+      if(e.target.closest('.toolbar') || e.target.closest('.note-box')) return;
+      var wasOpen = para.classList.contains('toolbar-open');
+      main.querySelectorAll('.para.toolbar-open').forEach(function(p){ p.classList.remove('toolbar-open'); });
+      if(!wasOpen) para.classList.add('toolbar-open');
+    });
+  });
 
   if(scrollToKey!==undefined){
     var el = document.getElementById('p-'+section.id.replace(/\W/g,'_')+'-'+scrollToKey);
@@ -622,6 +637,12 @@ document.getElementById('bookmarksBtn').addEventListener('click', function(){
   panel.style.display = showing ? 'none' : 'block';
   document.getElementById('prefsPanel').style.display = 'none';
 });
+// Tapping anywhere outside a paragraph (margin, heading, sidebar...)
+// dismisses whichever one's toolbar was tap-opened above.
+document.addEventListener('click', function(e){
+  if(e.target.closest('.para')) return;
+  document.querySelectorAll('.para.toolbar-open').forEach(function(p){ p.classList.remove('toolbar-open'); });
+});
 // ================= MOBILE SIDEBAR DRAWER (swipe left/right) =================
 function openNav(){ document.getElementById('sideNav').classList.add('open'); document.getElementById('navOverlay').classList.add('open'); }
 function closeNav(){ document.getElementById('sideNav').classList.remove('open'); document.getElementById('navOverlay').classList.remove('open'); }
@@ -670,6 +691,7 @@ async function checkAccess(){
   async function showReader(){
     gateEl.style.display = 'none';
     document.getElementById('readerRoot').style.display = 'flex';
+    document.getElementById('readerHint').style.display = '';
     document.getElementById('langToggle').textContent = currentLang==='zh' ? 'EN' : '\u4e2d\u6587';
     isAdmin = true; // this page is already gated to the single admin account
     document.getElementById('addChapterBtn').style.display = '';
